@@ -121,6 +121,12 @@ int IntegerValue::loadInstanceFromFile(void* data, int off) {
 	o += sizeof(int);
 	return o - off;
 }
+int FloatValue::loadInstanceFromFile(void* data, int off) {
+	int o = off;
+	memcpy(&value, offset(data, o), sizeof(float));
+	o += sizeof(float);
+	return o - off;
+}
 int StringValue::loadInstanceFromFile(void* data, int off) {
 	int o = off;
 	value = std::string((char*)offset(data, o));

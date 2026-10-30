@@ -6,10 +6,6 @@ public:
 	virtual Instance* clone_this();
 
 	Value();
-
-	virtual int getNumSaveBytes();
-	virtual int saveInstanceToFile(FILE* file);
-	virtual int loadInstanceFromFile(void* data, int off = 0);
 };
 
 class IntegerValue : public Value {

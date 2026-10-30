@@ -57,7 +57,7 @@ int main() {
 	core_shader->createProgram();
 	core_shader->setParent(resources);
 	core_shader->name = "MainShader";
-	LuaResource* script = new LuaResource("core://scripts/program.lua");
+	LuaResource* script = new LuaResource("core://scripts/editor_camera_controls.lua");
 	script->isEngineScript = true;
 	script->loadScript();
 

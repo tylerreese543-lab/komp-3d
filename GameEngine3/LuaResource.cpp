@@ -607,19 +607,19 @@ void LuaResource::InitializeLua() {
 		"BufferUpdateMode", &ProceduralGeometry::bufferUpdateMode,
 		"IsDrawElements", &ProceduralGeometry::drawElements
 		);
-	auto AudioType = lua.new_usertype<InstanceValue>(getInstanceNameFromType(InstanceType_Audio),
-		sol::base_classes, sol::bases<Value, Instance>(),
+	auto AudioType = lua.new_usertype<Audio>(getInstanceNameFromType(InstanceType_Audio),
+		sol::base_classes, sol::bases<Instance>(),
 		"new", sol::factories([](sol::this_state ts) {
 			return InstanceToSolObj(ts, new Audio());
 		}),
-		"Play", Audio::play,
-		"Stop", Audio::stop
+		"Play", &Audio::play,
+		"Stop", &Audio::stop
 	);
 	auto FolderType = lua.new_usertype<Folder>(getInstanceNameFromType(InstanceType_Folder),
 		sol::base_classes, sol::bases<Instance>(),
 		"new", sol::factories([](sol::this_state ts) {
 			return InstanceToSolObj(ts, new Folder());
-		}),
+		})
 	);
 	//This freaking blows, but it works i guess
 	InstanceType[sol::meta_function::index] =			&LuaResource::__luaIndex;

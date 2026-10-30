@@ -4,7 +4,7 @@
 #include "Shader.h"
 #include "TextGeometry.h"
 #include "SoundInstance.h"
-
+#include "Value.h"
 #define LOAD_INSTANCE_TAG 10
 #define LOAD_FONT_TAG 20
 #define LOAD_SOUND_TAG 30
@@ -325,64 +325,83 @@ int Scene::getNumSaveBytes() {
 
 Instance* Scene::newInstanceFromType(int type) {
 	Instance* inst = nullptr;
-				if (type == Instance::InstanceType_Scene) {
-				inst = new Scene();
-			} else
-			if (type == Instance::InstanceType_Undefined) {
-				inst = new Instance();
-			} else
-			if (type == Instance::InstanceType_Base) {
-				inst = new Instance();
-			}
-			else if (type == Instance::InstanceType_Camera) {
-				inst = new Camera();
-			}
-			else if (type == Instance::InstanceType_Mesh) {
-				inst = new Mesh();
-			}
-			else if (type == Instance::InstanceType_Geometry) {
-				inst = new Geometry();
-			}
-			else if (type == Instance::InstanceType_ProceduralGeometry) {
-				inst = new ProceduralGeometry();
-			}
-			else if (type == Instance::InstanceType_Material) {
-				inst = new Material();
-			}
-			else if (type == Instance::InstanceType_LuaResource) {
-				inst = new LuaResource();
-			}
-			else if (type == Instance::InstanceType_ShaderProgram) {
-				inst = new ShaderProgram();
-			}
-			else if (type == Instance::InstanceType_ShaderResource) {
-				inst = new ShaderResource();
-			}
-			else if (type == Instance::InstanceType_ImageResource) {
-				inst = new ImageResource();
-			}
-			else if (type == Instance::InstanceType_Collision2D) {
-				inst = new Collision2D();
-			}
-			else if (type == Instance::InstanceType_Collision3D) {
-				inst = new Collision3D();
-			}
-			else if (type == Instance::InstanceType_TextGeometry) {
-				inst = new TextGeometry();
-			}
-			else if (type == Instance::InstanceType_UIRootNode) {
-				inst = new UIRootNode();
-			}
-			else if (type == Instance::InstanceType_Audio) {
-				inst = new Audio();
-			}
-			else if (type == Instance::InstanceType_Folder) {
-				inst = new Folder();
-			}
-			else {
-				debug_log("Error creating new Instance: unknown instance type %d\n", type);
-				return nullptr;
-			}
+	switch (type) {
+	case InstanceType_Scene:
+		inst = new Scene();
+		break;
+	case InstanceType_Undefined:
+		inst = new Instance();
+		break;
+	case InstanceType_Base:
+		inst = new Instance();
+		break;
+	case InstanceType_Camera:
+		inst = new Camera();
+		break;
+	case InstanceType_Mesh:
+		inst = new Mesh();
+		break;
+	case InstanceType_Geometry:
+		inst = new Geometry();
+		break;
+	case InstanceType_ProceduralGeometry:
+		inst = new ProceduralGeometry();
+		break;
+	case InstanceType_Material:
+		inst = new Material();
+		break;
+	case InstanceType_LuaResource:
+		inst = new LuaResource();
+		break;
+	case InstanceType_ShaderProgram:
+		inst = new ShaderProgram();
+		break;
+	case InstanceType_ShaderResource:
+		inst = new ShaderResource();
+		break;
+	case InstanceType_ImageResource:
+		inst = new ImageResource();
+		break;
+	case InstanceType_Collision2D:
+		inst = new Collision2D();
+		break;
+	case InstanceType_Collision3D:
+		inst = new Collision3D();
+		break;
+	case InstanceType_TextGeometry:
+		inst = new TextGeometry();
+		break;
+	case InstanceType_UIRootNode:
+		inst = new UIRootNode();
+		break;
+	case InstanceType_Audio:
+		inst = new Audio();
+		break;
+	case InstanceType_Folder:
+		inst = new Folder();
+		break;
+	case InstanceType_IntegerValue:
+		inst = new IntegerValue();
+		break;
+	case InstanceType_FloatValue:
+		inst = new FloatValue();
+		break;
+	case InstanceType_StringValue:
+		inst = new StringValue();
+		break;
+	case InstanceType_BooleanValue:
+		inst = new BooleanValue();
+		break;
+	case InstanceType_Vector3Value:
+		inst = new Vector3Value();
+		break;
+	case InstanceType_InstanceValue:
+		inst = new InstanceValue();
+		break;
+	default:
+		debug_log("Error creating new Instance: unknown instance type %d\n", type);
+		return nullptr;
+	}
 			return inst;
 }
 

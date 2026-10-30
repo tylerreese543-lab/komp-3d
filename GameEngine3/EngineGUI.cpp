@@ -33,7 +33,13 @@ const int EngineGUI::EDITOR_ADD_INSTANCE[] = {
 	Instance::InstanceType_Geometry,
 	Instance::InstanceType_TextGeometry,
 	Instance::InstanceType_Audio,
-	Instance::InstanceType_Folder
+	Instance::InstanceType_Folder,
+	Instance::InstanceType_IntegerValue,
+	Instance::InstanceType_FloatValue,
+	Instance::InstanceType_StringValue,
+	Instance::InstanceType_BooleanValue,
+	Instance::InstanceType_Vector3Value,
+	Instance::InstanceType_InstanceValue,
 };
 
 const std::string EngineGUI::placeholderNoInstance = "No instance selected";
