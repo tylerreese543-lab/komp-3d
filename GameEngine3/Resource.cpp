@@ -3,7 +3,8 @@
 
 std::map<std::string, std::string> Resource::resourceFilePathMacros = {
 	{"res:/", "assets"},
-	{"core:/", "core"}
+	{"core:/", "core"},
+	{"saves:/", "saves"}
 };
 
 std::string Resource::resolveFilePath(const std::string& path) {

@@ -9,6 +9,7 @@
 #include "EngineGUI.h"
 #include "TextGeometry.h"
 #include "SoundInstance.h"
+#include "Stream.h"
 int main() {
 
 	Instance::registerHierarchy();

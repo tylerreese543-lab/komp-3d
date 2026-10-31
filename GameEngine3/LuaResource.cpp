@@ -9,6 +9,7 @@
 #include "AABB.h"
 #include "SoundInstance.h"
 #include "TextGeometry.h"
+#include "Stream.h"
 sol::state LuaResource::lua;
 LuaResource::LuaResource(std::string filepath) : Resource() {
 	name = "Script";
@@ -212,6 +213,35 @@ void LuaResource::InitializeLua() {
 		"OnLeftRelease", &MouseData::on_left_release,
 		"OnRightClick", &MouseData::on_right_click,
 		"OnRightRelease", &MouseData::on_right_release
+	);
+
+	lua.new_usertype<FileStream>("Stream",
+		sol::constructors<FileStream, FileStream(bool)>(),
+
+		"Open", &FileStream::open,
+		"Close", &FileStream::close,
+		"IsNew", sol::readonly(&FileStream::isNew),
+		"Write", [](FileStream& self, sol::object value) {
+            // Check for numbers (Lua numbers can convert to int)
+            if (value.is<int>()) {
+                self.writeInt(value.as<int>());
+            }
+			else if (value.is<bool>()) {
+                self.writeBool(value.as<bool>());
+            }
+			else if (value.is<float>()) {
+                self.writeFloat(value.as<float>());
+            }
+            // Check for strings
+            else if (value.is<std::string>()) {
+                self.writeString(value.as<std::string>());
+            }
+        },
+		"ReadInt", &FileStream::readInt,
+		"ReadFloat", &FileStream::readFloat,
+		"ReadBool", &FileStream::readBool,
+		"ReadString", &FileStream::readString,
+
 	);
 	lua.new_usertype<Gamepad>("Gamepad",
 		"LeftJoystick", sol::property(
