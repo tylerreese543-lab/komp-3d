@@ -9,13 +9,14 @@
 #include "AABB.h"
 #include "SoundInstance.h"
 #include "TextGeometry.h"
+#include "Light.h"
 #include "Stream.h"
 sol::state LuaResource::lua;
 LuaResource::LuaResource(std::string filepath) : Resource() {
 	name = "Script";
 	type = InstanceType_LuaResource;
 
-	isEngineScript = false;
+	isEditorIntrinsic = false;
 	filePath = filepath;
 	source = "";
 	has_tick = false;
@@ -67,6 +68,14 @@ sol::object LuaResource::InstanceToSolObj(sol::this_state ts, Instance* i) {
 		return sol::make_object(ts, (ProceduralGeometry*)i);
 	case InstanceType_TextGeometry:
 		return sol::make_object(ts, (TextGeometry*)i);
+	case InstanceType_PointLight:
+		return sol::make_object(ts, (Light*)i);
+	case InstanceType_Folder:
+		return sol::make_object(ts, (Folder*)i);
+	case InstanceType_Audio:
+		return sol::make_object(ts, (Audio*)i);
+	case InstanceType_UIRootNode:
+		return sol::make_object(ts, (UIRootNode*)i);
 	default:
 		//Base instance class - no casting necessary
 		return sol::make_object(ts, i);
@@ -240,8 +249,7 @@ void LuaResource::InitializeLua() {
 		"ReadInt", &FileStream::readInt,
 		"ReadFloat", &FileStream::readFloat,
 		"ReadBool", &FileStream::readBool,
-		"ReadString", &FileStream::readString,
-
+		"ReadString", &FileStream::readString
 	);
 	lua.new_usertype<Gamepad>("Gamepad",
 		"LeftJoystick", sol::property(
@@ -651,6 +659,44 @@ void LuaResource::InitializeLua() {
 			return InstanceToSolObj(ts, new Folder());
 		})
 	);
+
+	auto PointLightType = lua.new_usertype<Light>(getInstanceNameFromType(InstanceType_PointLight),
+		sol::base_classes, sol::bases<Instance>(),
+		"new", sol::factories([](sol::this_state ts) {
+			return InstanceToSolObj(ts, new Light());
+		}),	
+		"Position", sol::property(
+			&Light::setPosition,
+
+			[](Light* self, sol::this_state ts) {
+				vec3 vector;
+				vector.X = self->getLightData()->position.X;
+				vector.Y = self->getLightData()->position.Y;
+				vector.Z = self->getLightData()->position.Z;
+				return vector;
+			}
+		),
+		//TODO: expose Stream class and add JSON class
+		"Color", sol::property(
+			&Light::setColor,
+
+			[](Light* self, sol::this_state ts) {
+				vec3 vector;
+				vector.X = self->getLightData()->color.X;
+				vector.Y = self->getLightData()->color.Y;
+				vector.Z = self->getLightData()->color.Z;
+				return vector;
+			}
+		),
+		"Intensity", sol::property(
+			&Light::setIntensity,
+
+			[](Light* self, sol::this_state ts) {
+				return self->getLightData()->color.W;
+			}
+		)
+	);
+
 	//This freaking blows, but it works i guess
 	InstanceType[sol::meta_function::index] =			&LuaResource::__luaIndex;
 	ResourceType[sol::meta_function::index] =			&LuaResource::__luaIndex;
@@ -676,6 +722,7 @@ void LuaResource::InitializeLua() {
 	TextGeometryType[sol::meta_function::index] =		&LuaResource::__luaIndex;
 	AudioType[sol::meta_function::index] =				&LuaResource::__luaIndex;
 	FolderType[sol::meta_function::index] =				&LuaResource::__luaIndex;
+	PointLightType[sol::meta_function::index] =			&LuaResource::__luaIndex;
 	
 }
 LuaResource::~LuaResource() {
@@ -716,7 +763,7 @@ void LuaResource::loadFromFile(std::string filepath) {
 
 void LuaResource::loadScript() {
 	
-	if (Scene::isStudio && !isEngineScript) return;
+	if (Scene::isStudio && !isEditorIntrinsic) return;
 	env = sol::environment(lua, sol::create, lua.globals());
 	loaded_script = lua.load(source);
 	if (!loaded_script.valid()) {
@@ -759,11 +806,11 @@ void LuaResource::loadScript() {
 void LuaResource::update(float dt, bool isStudio) {
 	if (!has_tick) return;
 
-	if (!isStudio || isEngineScript) {
+	if (!isStudio || isEditorIntrinsic) {
 		auto result = tick_function(dt);
 		if (!result.valid()) {
 			sol::error err = result;
-			printf("LuaRuntimeError: %s\n", err.what());
+			debug_log("LuaRuntimeError: %s\n", err.what());
 		}
 	}
 
@@ -807,13 +854,19 @@ int LuaResource::loadInstanceFromFile(void* data, int off) {
 	o += Resource::loadInstanceFromFile(data, o);
 	int sourceLength = 0;
 	sourceLength = *(int*)offset(data, o);
-	printf("Loaded script source length: %d\n", sourceLength);
+	debug_log("Loaded script source length: %d\n", sourceLength);
 	o += sizeof(int);
 	char* src = (char*)offset(data, o);
 	source = new char[sourceLength + 1];
 	strcpy_s((char*)source, sourceLength + 1, src);
-	o += sourceLength + 1; // Move the offset past the string and null terminator
-	printf("Loaded script source: %s\n", source);
+	o += sourceLength + 1;
+	debug_log("Loaded script source: %s\n", source);
+
+	//Auto-load from file if there is a filepath && we are in the editor
+	if (filePath.length() > 0 && Scene::isStudio) {
+		loadFromFile(filePath);
+	}
+
 	return o - off; // Return 0 to indicate success
 }
 
@@ -827,11 +880,7 @@ int LuaResource::getNumSaveBytes() {
 
 void LuaResource::finalizeLoad(inst_conv_map* conversionMap) {
 	Instance::finalizeLoad(conversionMap);
-	if (source && strlen(source) > 0 && !isEngineScript) {
+	if (source && strlen(source) > 0 && !isEditorIntrinsic) {
 		loadScript();
 	}
-}
-
-bool LuaResource::omitFromSave() {
-	return isEngineScript;
 }

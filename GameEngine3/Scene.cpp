@@ -5,11 +5,14 @@
 #include "TextGeometry.h"
 #include "SoundInstance.h"
 #include "Value.h"
+#include "Light.h"
 #define LOAD_INSTANCE_TAG 10
 #define LOAD_FONT_TAG 20
 #define LOAD_SOUND_TAG 30
 #define END_SEQUENCE_TAG 40
+#define LOAD_LIGHTDATA_TAG 50
 
+int Scene::debugShader = -1;
 #ifdef STUDIO_EDITOR
 const bool Scene::isStudio = true;
 #else
@@ -22,6 +25,7 @@ Scene::Scene() : Instance() {
 	currentCamera = -1;
 	startCamera = -1;
 	uiRoot = -1;
+	renderShader = -1;
 	if (currentScene == -1) {
 		currentScene = getId();
 	}
@@ -29,7 +33,12 @@ Scene::Scene() : Instance() {
 
 void Scene::PreRender() {
 	Graphics* g = Graphics::getInstance();
-	g->clearWindow();
+	g->clearWindow(eFramebuffer_Lighting);
+	g->clearWindow(eFramebuffer_PostProcess);
+
+	g->deltaTime = (glfwGetTime() - g->lastFrameTime);
+	g->currentFPS = 1.0 / g->deltaTime;
+	g->lastFrameTime = glfwGetTime();
 	g->gamepad_data.UpdateGamepads();
 	if (isStudio && !getInstanceById(currentCamera)) {
 		for (auto pair : Instance::world) {
@@ -48,20 +57,25 @@ void Scene::PreRender() {
 	}
 	handleDestroyQueue();
 }
-void Scene::RenderScene() {
+void Scene::RenderScene(int passNum) {
 	UIRootNode* node = (UIRootNode*)getInstanceById(uiRoot);
 	Camera* ui_cam = nullptr;
 	if (node) {
 		ui_cam = node->getCamera();
 	}
-	Mesh::renderAllMeshes((Camera*)getInstanceById(currentCamera), ui_cam);
-	Collision3D::RenderAllCollisionBoxesDebug();
-	for(auto pair : Instance::world) {
-		Instance* child = pair.second;
-		if (!child) continue;
-		if (child->type == InstanceType_Camera && isStudio && !child->omitFromHierarchyRender()) {
-			//printf("Rendering debug for camera '%s' (ID %d)\n", child->name.c_str(), child->getId());
-			((Camera*)child)->debugRender();
+
+
+	Mesh::renderAllMeshes((Camera*)getInstanceById(currentCamera), ui_cam, passNum);
+
+	if (isStudio && passNum == 1) {
+		Collision3D::RenderAllCollisionBoxesDebug();
+		for (auto pair : Instance::world) {
+			Instance* child = pair.second;
+			if (!child) continue;
+			if (child->type == InstanceType_Camera && isStudio && !child->omitFromHierarchyRender()) {
+				//printf("Rendering debug for camera '%s' (ID %d)\n", child->name.c_str(), child->getId());
+				((Camera*)child)->debugRender();
+			}
 		}
 	}
 }
@@ -109,22 +123,28 @@ int Scene::saveInstanceToFile(FILE* file) {
 	int offset = 0;
 	offset += Instance::saveInstanceToFile(file);
 	offset += fwrite(&currentCamera, sizeof(int), 1, file);
-	offset += fwrite(&hitboxShader, sizeof(int), 1, file);
+	//offset += fwrite(&hitboxShader, sizeof(int), 1, file);
 	offset += fwrite(&startCamera, sizeof(int), 1, file);
 	offset += fwrite(&uiRoot, sizeof(int), 1, file);
+	offset += fwrite(&renderShader, sizeof(int), 1, file);
 	return offset;
 }
 
 int Scene::loadInstanceFromFile(void* data, int off) {
+
+	//TODO: hitbox shader should no longer be written
 	int o = off;
 	o += Instance::loadInstanceFromFile(data, o);
 	memcpy(&currentCamera, offset(data, o), sizeof(int));
 	o += sizeof(int);
-	memcpy(&hitboxShader, offset(data, o), sizeof(int));
-	o += sizeof(int);
+	//memcpy(&hitboxShader, offset(data, o), sizeof(int));
+	//o += sizeof(int);
 	memcpy(&startCamera, offset(data, o), sizeof(int));
 	o += sizeof(int);
 	memcpy(&uiRoot, offset(data, o), sizeof(int));
+	o += sizeof(int);
+	memcpy(&renderShader, offset(data, o), sizeof(int));
+	o += sizeof(int);
 	return o - off;
 }
 
@@ -174,6 +194,7 @@ void Scene::WriteGameFileHeader(FILE* file) {
 			total += pair.second.getNumSaveBytes() + (2 * sizeof(int));
 		}
 	}
+	total += Light::getGlobalLightDataSize() + (2 * sizeof(int));
 	total += 2 * sizeof(int); //End Sequence Tag
 	fwrite(&total, sizeof(int), 1, file);
 };
@@ -209,6 +230,8 @@ int Scene::saveSceneToFile(const char* filename) {
 		writeTagAndSizeToFile(LOAD_SOUND_TAG, pair.second.getNumSaveBytes(), f_main);
 		pair.second.serializeToFile(f_main);
 	}
+	writeTagAndSizeToFile(LOAD_LIGHTDATA_TAG, Light::getGlobalLightDataSize(), f_main);
+	Light::serializeGlobalLightData(f_main);
 	writeTagAndSizeToFile(END_SEQUENCE_TAG, 0, f_main);
 
 	fclose(f_main);
@@ -218,6 +241,7 @@ int Scene::loadSceneFromFile(const char* filename) {
 
 
 	inst_conv_map instanceIdConversionMap; // Map to store old ID to new ID mapping
+	instanceIdConversionMap[-1] = -1; //Ensure that empty ports remain empty.
 	FILE* f_main;
 	fopen_s(&f_main, Resource::resolveFilePath(filename).c_str(), "rb");
 
@@ -260,12 +284,16 @@ int Scene::loadSceneFromFile(const char* filename) {
 			loadedInstanceIds.insert(inst->getId()); // Track the loaded instance ID
 			printf("ID=%d, Said %d, Load %d\n", inst->getId(), numBytes, inst->loadInstanceFromFile(buffer, o));
 			instanceIdConversionMap[inst->savedId] = inst->getId(); // Store the mapping of old ID to new ID
+
 		}
 		else if (tag == LOAD_FONT_TAG) {
 			Font::deserializeFromFile(buffer, o);
 		}
 		else if (tag == LOAD_SOUND_TAG) {
 			AudioTrack::deserializeFromFile(buffer, o);
+		}
+		else if (tag == LOAD_LIGHTDATA_TAG) {
+			Light::deserializeGlobalLightData(buffer, o);
 		}
 		else if (tag == END_SEQUENCE_TAG) {
 			continue;
@@ -277,9 +305,11 @@ int Scene::loadSceneFromFile(const char* filename) {
 
 	Scene::setCurrentScene(instanceIdConversionMap[currentScene]);
 	Scene* cur = Scene::getCurrentScene();
-	cur->hitboxShader = instanceIdConversionMap[cur->hitboxShader];
+	//cur->hitboxShader = instanceIdConversionMap[cur->hitboxShader];
 	cur->startCamera = instanceIdConversionMap[cur->startCamera];
 	cur->uiRoot = instanceIdConversionMap[cur->uiRoot];
+	cur->renderShader = instanceIdConversionMap[cur->renderShader];
+
 	if (!isStudio) {
 		cur->currentCamera = instanceIdConversionMap[cur->currentCamera];
 		printf("Current camera ID updated to %d\n", cur->currentCamera);
@@ -398,6 +428,9 @@ Instance* Scene::newInstanceFromType(int type) {
 	case InstanceType_InstanceValue:
 		inst = new InstanceValue();
 		break;
+	case InstanceType_PointLight:
+		inst = new Light();
+		break;
 	default:
 		debug_log("Error creating new Instance: unknown instance type %d\n", type);
 		return nullptr;
@@ -444,7 +477,9 @@ int UIRootNode::loadInstanceFromFile(void* data, int off) {
 
 void UIRootNode::finalizeLoad(inst_conv_map* conversionMap) {
 	Instance::finalizeLoad(conversionMap);
-	this->camera = conversionMap->at(this->camera);
+	if (this->camera != -1) {
+		this->camera = conversionMap->at(this->camera);
+	}
 }
 
 Instance* UIRootNode::clone_this() {

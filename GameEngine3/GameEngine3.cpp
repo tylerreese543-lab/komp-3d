@@ -10,6 +10,7 @@
 #include "TextGeometry.h"
 #include "SoundInstance.h"
 #include "Stream.h"
+#include "Light.h"
 int main() {
 
 	Instance::registerHierarchy();
@@ -18,16 +19,16 @@ int main() {
 
 	graphics->initializeWindow(800, 600, "Game Engine 3");
 	graphics->matchViewportToWindow = true;
-	
+	graphics->initializeDeferredRendering();
 	LuaResource::InitializeLua();
 
 	EngineGUI::InitializeEngineGUI();
 	Audio::InitializeAudioEngine();
+	Light::InitializeLightingUBO();
     if (FT_Init_FreeType(&Font::ft)) {
         std::cerr << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
         return -1;
     }
-
 
 #ifndef STUDIO_EDITOR
 	Scene::loadSceneFromFile("scene.bin");
@@ -38,8 +39,8 @@ int main() {
 #else
 	Scene* scene = new Scene();
 	Camera* camera = new Camera(vec3(0, 0, -2));
-	camera->fov = 70.0f;
-	camera->isEditorCamera = true;
+	camera->fov = 90.0f;
+	camera->isEditorIntrinsic = true;
 	scene->currentCamera = camera->getId();
 	
 	UIRootNode* uir = new UIRootNode();
@@ -48,36 +49,153 @@ int main() {
 	Folder* resources = new Folder();
 	resources->name = "Resources";
 	resources->setParent(scene);
-
-	ShaderProgram* debug_shader = new ShaderProgram("core://shader/debug_vertex.glsl", "core://shader/debug_fragment.glsl");
-	debug_shader->createProgram();
-	debug_shader->setParent(resources);
-	debug_shader->name = "DebugShader";
-	scene->hitboxShader = debug_shader->getId();
 	ShaderProgram* core_shader = new ShaderProgram("core://shader/core_vertex.glsl", "core://shader/core_fragment.glsl");
 	core_shader->createProgram();
 	core_shader->setParent(resources);
 	core_shader->name = "MainShader";
 	LuaResource* script = new LuaResource("core://scripts/editor_camera_controls.lua");
-	script->isEngineScript = true;
+	script->isEditorIntrinsic = true;
 	script->loadScript();
 
 	TextGeometry::loadFont("res://fonts/DroidSans.ttf");
-
+	//render_shader->isEditorIntrinsic = true;
+	ShaderProgram* pp_shader = new ShaderProgram("core://shader/quad_vertex.glsl", "core://shader/quad_fragment.glsl");
+	pp_shader->createProgram();
+	pp_shader->setParent(resources);
+	pp_shader->name = "PostProcessingShader";
+	scene->renderShader = pp_shader->getId();
 #endif
 
-	//Scene::loadSceneFromFile("scene.bin");
+	
+	ProceduralGeometry* shaderQuadGeom = new ProceduralGeometry();
+	shaderQuadGeom->name = "RenderQuadGeom";
+	shaderQuadGeom->isEditorIntrinsic = true;
+	shaderQuadGeom->drawElements = true;
+	shaderQuadGeom->vboFlags[eVBO_Positions] = true;
+	shaderQuadGeom->vboFlags[eVBO_UV] = true;
+	shaderQuadGeom->addVertex(ProceduralVertex(
+		vec3(-1, -1, 1), vec3(0, 0, 0), vec2(0, 0), vec3()
+	));
+	shaderQuadGeom->addVertex(ProceduralVertex(
+		vec3(1, -1, 1), vec3(0, 0, 0), vec2(1, 0), vec3()
+	));
+	shaderQuadGeom->addVertex(ProceduralVertex(
+		vec3(1, 1, 1), vec3(0, 0, 0), vec2(1, 1), vec3()
+	));
+	shaderQuadGeom->addVertex(ProceduralVertex(
+		vec3(-1, 1, 1), vec3(0, 0, 0), vec2(0, 1), vec3()
+	));
+	shaderQuadGeom->addTriangle(0, 1, 2);
+	shaderQuadGeom->addTriangle(0, 2, 3);
 
-	//Scene::saveSceneToFile("scene.bin");
-	//CAMERA - define camera position, planes, and FOV
-	//LOOP
+	Mesh* renderQuad = new Mesh();
+	renderQuad->isEditorIntrinsic = true;
+	renderQuad->cull = false;
+
+	ShaderProgram* debug_shader = new ShaderProgram("core://shader/debug_vertex.glsl", "core://shader/debug_fragment.glsl");
+	debug_shader->setDefaultOutputPort(eMaterialTexture_Diffuse, "color");
+	debug_shader->createProgram();
+	debug_shader->name = "DebugShader";
+	debug_shader->isEditorIntrinsic = true;
+	Scene::debugShader = debug_shader->getId();
+
+	
+	ShaderProgram* render_shader = new ShaderProgram("core://shader/lighting_vertex.glsl", "core://shader/lighting_fragment.glsl");
+	render_shader->createProgram();
+	render_shader->name = "RenderShader";
+	render_shader->isEditorIntrinsic = true;
+	/*
+	* 
+	TODO: Add static instance ID ports for debug shader 
+	 
+	 that are consistent across all load 
+	/ save for editor intrinsic resources.
+	This will allow for consistent references to these resources across scenes and saves. */
+
+
+
+	ImageResource* diffuse_FBOPortRender = new ImageResource(eMaterialTexture_Diffuse);
+	diffuse_FBOPortRender->name = "DiffuseLocation";
+	diffuse_FBOPortRender->isEditorIntrinsic = true;
+	diffuse_FBOPortRender->frameBufferType = eFramebuffer_Lighting;
+	diffuse_FBOPortRender->resizeToWindow = true;
+	diffuse_FBOPortRender->loadAsFramebufferTarget();
+	
+	ImageResource* diffuse_FBOPortPP = new ImageResource(eMaterialTexture_Diffuse);
+	diffuse_FBOPortPP->name = "DiffuseLocation";
+	diffuse_FBOPortPP->isEditorIntrinsic = true;
+	diffuse_FBOPortPP->frameBufferType = eFramebuffer_PostProcess;
+	diffuse_FBOPortPP->resizeToWindow = true;
+	diffuse_FBOPortPP->loadAsFramebufferTarget();
+
+	ImageResource* normal_FBOPort = new ImageResource(eMaterialTexture_Normal);
+	normal_FBOPort->name = "NormalLocation";
+	normal_FBOPort->isEditorIntrinsic = true;
+	normal_FBOPort->frameBufferType = eFramebuffer_Lighting;
+	normal_FBOPort->resizeToWindow = true;
+	normal_FBOPort->loadAsFramebufferTarget();
+
+	ImageResource* specular_FBOPort = new ImageResource(eMaterialTexture_Specular);
+	specular_FBOPort->name = "NormalLocation";
+	specular_FBOPort->isEditorIntrinsic = true;
+	specular_FBOPort->frameBufferType = eFramebuffer_Lighting;
+	specular_FBOPort->resizeToWindow = true;
+	specular_FBOPort->loadAsFramebufferTarget();
+
+	ImageResource* position_FBOPort = new ImageResource(eMaterialTexture_Position);
+	position_FBOPort->name = "NormalLocation";
+	position_FBOPort->isEditorIntrinsic = true;
+	position_FBOPort->frameBufferType = eFramebuffer_Lighting;
+	position_FBOPort->resizeToWindow = true;
+	position_FBOPort->loadAsFramebufferTarget();
+
+	ImageResource* roughness_FBOPort = new ImageResource(eMaterialTexture_Roughness);
+	roughness_FBOPort->name = "RoughnessLocation";
+	roughness_FBOPort->isEditorIntrinsic = true;
+	roughness_FBOPort->frameBufferType = eFramebuffer_Lighting;
+	roughness_FBOPort->resizeToWindow = true;
+	roughness_FBOPort->loadAsFramebufferTarget();
+
+	Material* renderQuadMaterial = new Material();
+	renderQuadMaterial->setTexture(diffuse_FBOPortRender);
+	renderQuadMaterial->setTexture(normal_FBOPort);
+	renderQuadMaterial->setTexture(position_FBOPort);
+	renderQuadMaterial->setTexture(roughness_FBOPort);
+	renderQuadMaterial->setTexture(specular_FBOPort);
+	renderQuadMaterial->isEditorIntrinsic = true;
+	renderQuadMaterial->textureUseFlags[eMaterialTexture_Diffuse] = true;
+	renderQuadMaterial->textureUseFlags[eMaterialTexture_Position] = true;
+	renderQuadMaterial->textureUseFlags[eMaterialTexture_Normal] = true;
+	renderQuadMaterial->textureUseFlags[eMaterialTexture_Roughness] = true;
+	renderQuadMaterial->textureUseFlags[eMaterialTexture_Specular] = true;
+	renderQuadMaterial->frameBufferType = eFramebuffer_Lighting;
+
+	Material* ppQuadMaterial = new Material();
+	ppQuadMaterial->setTexture(diffuse_FBOPortPP);
+	ppQuadMaterial->isEditorIntrinsic = true;
+	ppQuadMaterial->textureUseFlags[eMaterialTexture_Diffuse] = true;
+	ppQuadMaterial->frameBufferType = eFramebuffer_PostProcess;
+
+	renderQuad->geometry = shaderQuadGeom->getId();
+	renderQuad->material = renderQuadMaterial->getId();
+	renderQuad->renderLayer = eRenderLayer_UI;
+
+	glfwSetFramebufferSizeCallback(graphics->window, &graphics->resizeFramebufferCallback);
+
+	Light* light = new Light();
+	light->name = "LightMain";
+	light->setParent(scene);
+	Light::bindLightsToRender();
 
 
 	while (graphics->shouldOpenWindow()) {
 
 		if ((glfwGetTime() - graphics->lastFrameTime) < (1.0 / (float)graphics->targetFPS)) continue;
 		Scene::getCurrentScene()->PreRender();
-
+		ppQuadMaterial->setShader((ShaderProgram*)Instance::getInstanceById(Scene::getCurrentScene()->renderShader));
+		ppQuadMaterial->applyMaterialFramebuffer();
+		renderQuadMaterial->setShader(render_shader);
+		renderQuadMaterial->applyMaterialFramebuffer();
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
@@ -142,13 +260,60 @@ int main() {
 				i.second->update(graphics->deltaTime, Scene::isStudio);
 			}
 		}
+
+		Light::updateLightsToUBO();
+		/*
+			old pipeline
+
+			Render all of the data to the G-Buffer to FBO 1
+			Render quad with super fancy lighting to the screene
+		*/
+		/*
+		TODO: change render pipeline
+
+		2 FBOS (one for lighting, one for post-process)
+		Render all G-Buffer data to FBO 1 for lit objects only
+		Render quad to FBO 2 with lighting pass shader
+
+		Copy ONLY depth to FBO 2
+		Render all unlit objects (objects that are customly shaded) to FBO 2
+		Render all transparent unlit/lit objects to main FBO 2
+		Render quad again to FBO 0 with post-processing pass
+
+		*/
+
 		glBindVertexArray(0);
-
-		Scene::getCurrentScene()->RenderScene();
-
+		graphics->getFramebuffer(eFramebuffer_Lighting)->bind();
+		glEnable(GL_STENCIL_TEST);
+		glStencilFunc(GL_ALWAYS, 1, 0xFF);
+		glStencilMask(0xFF);
+		glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+		Scene::getCurrentScene()->RenderScene(0);
+		graphics->getFramebuffer(eFramebuffer_Lighting)->unbind();
+		graphics->getFramebuffer(eFramebuffer_Lighting)->rebindAs(GL_READ_FRAMEBUFFER, false);
+		graphics->getFramebuffer(eFramebuffer_PostProcess)->rebindAs(GL_DRAW_FRAMEBUFFER, false);
+		glDepthMask(GL_TRUE);
+		glBlitFramebuffer(0, 0, graphics->viewportWidth, graphics->viewportHeight, 0, 0, graphics->viewportWidth, graphics->viewportHeight, GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+		graphics->getFramebuffer(eFramebuffer_Lighting)->rebindAs(GL_FRAMEBUFFER);
+		graphics->getFramebuffer(eFramebuffer_PostProcess)->rebindAs(GL_FRAMEBUFFER);
+		graphics->getFramebuffer(eFramebuffer_PostProcess)->bind();
+		renderQuad->material = renderQuadMaterial->getId();
+		glStencilMask(0x00);
+		glStencilFunc(GL_EQUAL, 1, 0xFF);
+		glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+		renderQuad->render(Scene::getCurrentScene()->getCamera(), false, eRenderLayer_UI);
+		glStencilMask(0xFF);
+		glDisable(GL_STENCIL_TEST);
+		graphics->getFramebuffer(eFramebuffer_Lighting)->unbind();
+		graphics->getFramebuffer(eFramebuffer_PostProcess)->bind();
+		Scene::getCurrentScene()->RenderScene(1);
+		graphics->getFramebuffer(eFramebuffer_PostProcess)->unbind();
+		renderQuad->material = ppQuadMaterial->getId();
+		renderQuad->render(Scene::getCurrentScene()->getCamera(), false, eRenderLayer_UI);
+		Scene::getCurrentScene()->RenderScene(2);
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-		Graphics::getInstance()->windowUpdate();
+		graphics->windowUpdate();
 	}
 
 

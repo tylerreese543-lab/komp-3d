@@ -9,10 +9,10 @@
 #include "GameInstance.h"
 #include <PUGIXML/pugixml.hpp>
 class EngineGUI {
-
+	
 	static pugi::xml_document tooltipsXML;
 	static bool wasXMLSuccessful;
-	static const int EDITOR_ADD_INSTANCE[18];
+	static const int EDITOR_ADD_INSTANCE[19];
 	static void DrawInspectorPanel(Instance* inst);
 	static std::string selectedInstanceHash;
 	static std::vector<std::string> tooltipStrings;

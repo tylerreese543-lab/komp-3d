@@ -227,12 +227,17 @@ void Collision3D::debugRender() {
 	vertexBuffer.calcSize(24);
 	unsigned int vao = 0;
 
-	ShaderProgram* program = (ShaderProgram*)getInstanceById(Scene::getCurrentScene()->hitboxShader);
+	ShaderProgram* program = (ShaderProgram*)getInstanceById(Scene::debugShader);
 	program->useProgram();
 	vertexBuffer.generate();
 	GenVAO(&vao, &vertexBuffer, nullptr, &program->layout);
 
 	Camera* camera = Scene::getCurrentScene()->getCamera();
+
+	glDepthMask(GL_TRUE);
+	glDisable(GL_CULL_FACE);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
 
 	mat4 transform = mat4::transform(position, size, vec3(0.0));
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], transform, GL_TRUE, 4);

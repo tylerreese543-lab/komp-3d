@@ -8,12 +8,12 @@ out vec4 color;
 
 uniform sampler2D t_Diffuse;
 uniform sampler2D t_AmbientOcclusion;
-uniform vec3 m_DiffuseColor;
+uniform vec4 m_DiffuseColor;
 uniform sampler2DArray tx_TextGlyphs;
 void main() {
 
 	
 	vec3 uvw = vec3(out_texCoord, out_layer);
 	float lum = texture(tx_TextGlyphs, uvw).r;
-	color = vec4(m_DiffuseColor, lum);
+	color = vec4(m_DiffuseColor.rgb, lum);
 }

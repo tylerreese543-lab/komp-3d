@@ -6,6 +6,7 @@
 #include "AABB.h"
 #include "TextGeometry.h"
 #include "SoundInstance.h"
+#include "Light.h"
 int EngineGUI::selectedInstanceId = -1;
 std::string EngineGUI::selectedInstanceHash = "";
 
@@ -40,6 +41,7 @@ const int EngineGUI::EDITOR_ADD_INSTANCE[] = {
 	Instance::InstanceType_BooleanValue,
 	Instance::InstanceType_Vector3Value,
 	Instance::InstanceType_InstanceValue,
+	Instance::InstanceType_PointLight
 };
 
 const std::string EngineGUI::placeholderNoInstance = "No instance selected";
@@ -282,11 +284,11 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 	}
 	if (inst->type == Instance::InstanceType_Scene) {
 		Scene* m = (Scene*)inst;
-		if (hasEyeDropCompleted(inst->getId(), 1)) {
-			endEyeDropper(&m->hitboxShader);
-		}
 		if (hasEyeDropCompleted(inst->getId(), 2)) {
 			endEyeDropper(&m->startCamera);
+		}
+		if (hasEyeDropCompleted(inst->getId(), 3)) {
+			endEyeDropper(&m->renderShader);
 		}
 		ImGui::InputText("Start Camera", placeholderName(Instance::getInstanceById(m->startCamera)), ImGuiInputTextFlags_ReadOnly);
 		renderTooltipForItem(IDS_IATTR_GEOMETRY);
@@ -294,6 +296,16 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 			startEyeDropper(inst->getId(), 2);
 			eyeDropperSpecificType = Instance::InstanceType_Camera;
 		}
+
+		ImGui::InputText("Output Shader", placeholderName(Instance::getInstanceById(m->renderShader)), ImGuiInputTextFlags_ReadOnly);
+		renderTooltipForItem(IDS_IATTR_GEOMETRY);
+		if (ImGui::Button("Select Output Shader...")) {
+			startEyeDropper(inst->getId(), 3);
+			eyeDropperSpecificType = Instance::InstanceType_ShaderProgram;
+		}
+
+		ImGui::ColorEdit3("Ambient Light", (float*)&Light::ambient);
+		ImGui::ColorEdit4("Background Color", (float*)&Graphics::backgroundColor);
 	}
 	if (inst->type == Instance::InstanceType_Collision3D) {
 		Collision3D* m = (Collision3D*)inst;
@@ -324,7 +336,7 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 			}
 		}
 
-		if (hasEyeDropCompleted(inst->getId(), 5)) {
+		if (hasEyeDropCompleted(inst->getId(), eMaterialTexture_MAX + 2)) {
 			debug_log("Eye dropper completed for shader\n");
 			if (isEyeDropperValidAndOfType(Instance::InstanceType_ShaderProgram)) {
 				m->setShader((ShaderProgram*)Instance::getInstanceById(eyeDropperId));
@@ -335,7 +347,9 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 			endEyeDropper(nullptr);
 		}
 
-		ImGui::ColorEdit3("Albedo Color", (float*)&m->diffuseColor);
+		ImGui::ColorEdit4("Albedo Color", (float*)&m->diffuseColor);
+		ImGui::SliderInt("Specularity", &m->specularity, 0, 256);
+		ImGui::SliderFloat("Roughness", &m->roughness, 0, 1);
 		renderTooltipForItem(IDS_IATTR_POSITION);
 		ImGui::Text("Texture Targets");
 
@@ -343,38 +357,33 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 			ImGui::Checkbox((std::string("Use ") + ImageResource::textureTypeNames[i + 1]).c_str(), &m->textureUseFlags[i]);
 			renderTooltipForItem(IDS_IATTR_GEOMETRY);
 		}
-		ImGui::InputText("Albedo Texture", placeholderName(Instance::getInstanceById(m->getTextureInstanceId(eMaterialTexture_Diffuse))), ImGuiInputTextFlags_ReadOnly);
-		renderTooltipForItem(IDS_IATTR_GEOMETRY);
-		if (ImGui::Button("Select Albedo Texture...")) {
-			startEyeDropper(inst->getId(), eMaterialTexture_Diffuse + 1, true);
-		}
-		ImGui::InputText("Normal Map", placeholderName(Instance::getInstanceById(m->getTextureInstanceId(eMaterialTexture_Normal))), ImGuiInputTextFlags_ReadOnly);
-		renderTooltipForItem(IDS_IATTR_GEOMETRY);
-		if (ImGui::Button("Select Normal Map...")) {
-			startEyeDropper(inst->getId(), eMaterialTexture_Normal + 1, true);
-		}
-		ImGui::InputText("Specular Map", placeholderName(Instance::getInstanceById(m->getTextureInstanceId(eMaterialTexture_Specular))), ImGuiInputTextFlags_ReadOnly);
-		renderTooltipForItem(IDS_IATTR_GEOMETRY);
-		if (ImGui::Button("Select Specular Map...")) {
-			startEyeDropper(inst->getId(), eMaterialTexture_Specular + 1, true);
-		}
-		ImGui::InputText("Ambient Occlusion Map", placeholderName(Instance::getInstanceById(m->getTextureInstanceId(eMaterialTexture_AmbientOcclusion))), ImGuiInputTextFlags_ReadOnly);
-		renderTooltipForItem(IDS_IATTR_GEOMETRY);
-		if (ImGui::Button("Select Ambient Occlusion Map...")) {
-			startEyeDropper(inst->getId(), eMaterialTexture_AmbientOcclusion + 1, true);
+		for (int i = 0; i < eMaterialTexture_MAX; i++) {
+			ImGui::InputText((ImageResource::textureTypeNames[i + 1] + " Texture").c_str(), placeholderName(Instance::getInstanceById(m->getTextureInstanceId(i))), ImGuiInputTextFlags_ReadOnly);
+			renderTooltipForItem(IDS_IATTR_GEOMETRY);
+			if (ImGui::Button(("Select " + ImageResource::textureTypeNames[i + 1] + " Texture...").c_str())) {
+				startEyeDropper(inst->getId(), i + 1, true);
+			}
 		}
 		ImGui::InputText("Shader", placeholderName(Instance::getInstanceById(m->getShaderInstanceId())), ImGuiInputTextFlags_ReadOnly);
 		renderTooltipForItem(IDS_IATTR_GEOMETRY);
 		if (ImGui::Button("Select Shader...")) {
-			startEyeDropper(inst->getId(), 5, true);
+			startEyeDropper(inst->getId(), eMaterialTexture_MAX + 2, true);
 		}
 		if (ImGui::Button("Auto-Prepare Material")) {
 			m->autoPrepare(true);
 		};
 
 		ImGui::Checkbox("Transparent", &(m->isTransparent));
+		ImGui::Checkbox("Lit", &(m->isLit));
 	}
+	if (inst->type == Instance::InstanceType_PointLight) {
+		Light* m = (Light*)inst;
 
+		ImGui::InputFloat3("Position", (float*)&m->getLightData()->position);
+		ImGui::ColorEdit3("Color", (float*)&m->getLightData()->color);
+		renderTooltipForItem(IDS_IATTR_POSITION);
+		ImGui::InputFloat("Intensity", (float*)&m->getLightData()->color.W);
+	}
 	if (Instance::isInstanceOf(inst->type, Instance::InstanceType_Resource)) {
 		Resource* m = (Resource*)inst;
 		if (ImGui::InputText("File Path", &m->filePath, ImGuiInputTextFlags_EnterReturnsTrue)) {
@@ -404,7 +413,7 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 				currentSelectionDropdown = ((ImageResource*)inst)->textureType + 1;
 			}
 
-			if (DrawDropdown("Texture Port", (std::string*)ImageResource::textureTypeNames, 5) != -1) {
+			if (DrawDropdown("Texture Port", (std::string*)ImageResource::textureTypeNames, eMaterialTexture_MAX + 1) != -1) {
 				imgRes->textureType = currentSelectionDropdown - 1;
 				imgRes->loadFromFile(imgRes->filePath);
 			}
@@ -425,6 +434,13 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 				m->shaderType = ShaderResource::shaderTypeEnums[currentSelectionDropdown];
 				m->loadFromFile(m->filePath.c_str());
 			}
+		}
+
+		if (inst->type == Instance::InstanceType_Geometry) {
+				Geometry* m = (Geometry*)inst;
+				if (ImGui::Checkbox("Generate With Smoothed Normals", &m->autoCreateSmoothedNormals)) {
+					m->loadFromFile(m->filePath);
+				}
 		}
 
 		return;
@@ -612,7 +628,9 @@ Instance* EngineGUI::newInstanceFromType(int type, int p) {
 	if (i && p) {
 		i->setParent(Instance::getInstanceById(p)); 
 	}
-
+	if (i->type == Instance::InstanceType_Material) {
+		Material* m = (Material*)i;
+	}
 	return i;
 }
 

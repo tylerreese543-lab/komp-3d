@@ -309,7 +309,7 @@ int TextGeometry::saveInstanceToFile(FILE* file) {
 
 int TextGeometry::loadInstanceFromFile(void* data, int off) {
     int o = off;
-    o = Mesh::loadInstanceFromFile(data, o);
+    o += Mesh::loadInstanceFromFile(data, o);
     text = std::string((char*)offset(data, o));
     o += text.length() + 1;
     font = std::string((char*)offset(data, o));
@@ -319,6 +319,7 @@ int TextGeometry::loadInstanceFromFile(void* data, int off) {
 }
 
 void TextGeometry::setText(std::string newText) {
+	if (newText == text) return;
     text = newText;
     isDirty = true;
 }

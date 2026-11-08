@@ -1,13 +1,14 @@
 #include "TextureResource.h"
 #include "stb_image/stb_image.h"
-#include "Graphics/GraphicsWrapper.h"
-
+#include "Graphics/Graphics.h"
 const std::string ImageResource::textureTypeNames[] = {
 	"None",
 	"Diffuse",
 	"Ambient Occlusion",
 	"Normal",
-	"Specular"
+	"Specular",
+	"Position",
+	"Roughness"
 };
 ImageResource::ImageResource(int textureType, std::string filepath) : Resource() {
 	name = "Texture";
@@ -21,11 +22,57 @@ ImageResource::ImageResource(int textureType, std::string filepath) : Resource()
 	type = InstanceType_ImageResource;
 	SetGLLoadParams(GL_REPEAT, GL_REPEAT, GL_NEAREST, GL_NEAREST);
 	loaded = false;
+	frameBufferType = eFramebuffer_None;
 	//Do not use this for any textures
 	this->textureType = textureType;
 	loadFromFile(filepath);
 }
+void ImageResource::loadAsFramebufferTarget() {
+
+	if (textureType == -1) return;
+	Graphics* g = Graphics::getInstance();
+
+	if (!g->getFramebuffer(frameBufferType)->exists()) return;
+	g->getFramebuffer(frameBufferType)->bind();
+
+	width = g->viewportWidth;
+	height = g->viewportHeight;
+	if (GLTextureID != 0) {
+		glDeleteTextures(1, &GLTextureID);
+		GLTextureID = 0;
+	}
+
+	SetGLLoadParams(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE, GL_NEAREST, GL_NEAREST);
+	int dataType;
+	getLoadTypesFramebuffer(&dataType);
+	glGenTextures(1, &GLTextureID);
+	glBindTexture(GL_TEXTURE_2D, GLTextureID);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, typeLoadFile, width, height, 0, Channels, dataType, Data);
+
+	GLenum textureError = glGetError();
+if (textureError != GL_NO_ERROR) {
+    debug_log("Framebuffer texture allocation failed: 0x%X\n W: %d, H: %d, Channels: %d, TLF: %d\n", textureError, width, height, Channels, typeLoadFile);
+}
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GLTextureParameters[0]);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GLTextureParameters[1]);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GLTextureParameters[2]);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GLTextureParameters[3]);
+	
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + textureType, GL_TEXTURE_2D, GLTextureID, 0);
+	loaded = true;
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    debug_log("Framebuffer incomplete: 0x%X\n", glCheckFramebufferStatus(GL_FRAMEBUFFER));
+	}
+	g->getFramebuffer(frameBufferType)->unbind();
+}
 void ImageResource::loadFromFile(std::string filepath, GLenum fileType) {
+	if (frameBufferType > 0) {
+		debug_log("Defer image load to framebuffer target\n");
+		loadAsFramebufferTarget();
+	}
 	filePath = filepath;
 
 	if (GLTextureID != 0) {
@@ -53,6 +100,7 @@ void ImageResource::loadFromFile(std::string filepath, GLenum fileType) {
 					break;
 				case eMaterialTexture_AmbientOcclusion:
 				case eMaterialTexture_Specular:
+				case eMaterialTexture_Roughness:
 					typeLoadFile = GL_RED;
 					break;
 				default:
@@ -132,6 +180,11 @@ ImageResource::~ImageResource() {
 		stbi_image_free(Data);
 		Data = nullptr;
 	}
+
+	if (GLTextureID != 0) {
+		glDeleteTextures(1, &GLTextureID);
+		GLTextureID = 0;
+	}
 }
 
 Instance* ImageResource::clone_this() {
@@ -194,4 +247,32 @@ int ImageResource::loadInstanceFromFile(void* data, int off) {
 
 int ImageResource::getNumSaveBytes() {
 	return Resource::getNumSaveBytes() + (5 * sizeof(int)) + (5 * sizeof(GLenum));
+}
+
+void ImageResource::getLoadTypesFramebuffer(int* dataType) {
+	switch (textureType) {
+	case eMaterialTexture_Diffuse:
+		typeLoadFile = GL_RGBA;
+		Channels = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		break;
+	case eMaterialTexture_Position:
+	case eMaterialTexture_Normal:
+		typeLoadFile = GL_RGBA16F;
+		Channels = GL_RGBA;
+		*dataType = GL_FLOAT;
+		break;
+	case eMaterialTexture_Roughness:
+	case eMaterialTexture_Specular:
+		typeLoadFile = GL_R16F;
+		Channels = GL_RED;
+		*dataType = GL_UNSIGNED_BYTE;
+		break;
+	default:
+		debug_log("No texture type found");
+		typeLoadFile = GL_RGBA;
+		Channels = GL_RGBA;
+		*dataType = GL_UNSIGNED_BYTE;
+		break;
+	}
 }

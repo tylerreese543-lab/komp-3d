@@ -17,11 +17,14 @@ public:
 
 	bool textureUseFlags[eMaterialTexture_MAX];
 
-	vec3 diffuseColor;
-	float specularity;
+	vec4 diffuseColor;
+	int specularity;
+	float roughness;
 	//Whether or not this material will shade objects non-opaquely.
 	bool isTransparent;
-	
+	//Whether or not this material will follow the fixed lighting pipeline.
+	bool isLit;
+	int frameBufferType;
 	Material();
 
 	void setTexture(ImageResource* index);
@@ -31,6 +34,7 @@ public:
 	void autoPrepare(bool autoFlags);
 	void SetTextureUseFlags(bool useDiffuse, bool useAmbientOcclusion, bool useNormal, bool useSpecular);
 	void applyMaterial();
+	void applyMaterialFramebuffer();
 
 	int getShaderInstanceId();
 	int getTextureInstanceId(int target);

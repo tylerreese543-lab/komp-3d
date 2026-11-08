@@ -5,16 +5,18 @@
 class Scene : public Instance
 {
 	static int currentScene;
+
 	static void WriteGameFileHeader(FILE* file);
 	static bool LoadGameFileHeader(FILE* file, int* numInstances);
 
 public:
+	static int debugShader;
 	static const bool isStudio;
 	int currentCamera;
 	//The ID of the camera to load into currentCamera when this is loaded at runtime;
 	int startCamera;
-	int hitboxShader;
 	int uiRoot;
+	int renderShader;
 
 
 	Scene();
@@ -25,7 +27,7 @@ public:
 	Camera* getCamera();
 	static Camera* getCurrentCamera();
 	void PreRender();
-	void RenderScene();
+	void RenderScene(int passNum);
 
 	virtual int saveInstanceToFile(FILE* file);
 	virtual int loadInstanceFromFile(void* data, int offset = 0);

@@ -19,6 +19,7 @@ public:
 	//Whether the geometry contains multiple attributes in a single buffer or is stored separately in multiple;
 	bool vboFlags[eVBO_MAX];
 	bool isGeometryInterleaved; 
+	bool autoCreateSmoothedNormals;
 	Buffer ebo;
 	virtual int generateVAO(BufferLayout* layout);
 	Geometry();
@@ -30,7 +31,7 @@ public:
 	virtual void setVBOFlags(bool hasPositions, bool hasUV, bool hasNormal, bool hasColor, bool hasExtra = false);
 	virtual void autoSearchVBO();
 	//genTangentsToExtra will generate the tangent/bi-tangent and place them in the extra VBO.
-	void loadFromFile(std::string filepath, int meshID = 0, int ImporterFlags = aiProcess_Triangulate);
+	void loadFromFile(std::string filepath, int meshID = 0, int ImporterFlags = aiProcess_Triangulate | aiProcess_FlipWindingOrder);
 
 	virtual int saveInstanceToFile(FILE* file);
 	virtual int loadInstanceFromFile(void* data, int offset = 0);
@@ -102,6 +103,7 @@ protected:
 public:
 	const static std::string renderLayerNames[eRenderLayer_MAX];
 	const static int renderLayerEnum[eRenderLayer_MAX];
+
 	vec3 rotation;
 	vec3 position;
 	vec3 scale;
@@ -111,6 +113,7 @@ public:
 	mat4 transform;
 	int renderLayer;
 	bool cull;
+
 	//Force the VAO to be regenerated due to shader change/resrt
 	bool VAODirty;
 	virtual void render(Camera* camera, bool transparent = false, int renderLayerTarget = eRenderLayer_World);
@@ -124,7 +127,7 @@ public:
 	void setRotation(vec3 rotation);
 	void setScale(vec3 scale);
 
-	static void renderAllMeshes(Camera* camera_world, Camera* camera_ui);
+	static void renderAllMeshes(Camera* camera_world, Camera* camera_ui, int passNum);
 
 	virtual int destroy();
 

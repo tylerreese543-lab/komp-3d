@@ -22,3 +22,19 @@ class Buffer {
 	virtual void calcSize(int count);
 	int getCount();
 };
+
+class GraphicsBuffer {
+public:
+	bool isFrameBuffer;
+
+	GLenum type;
+	GLuint id;
+
+	GraphicsBuffer();
+	virtual void generate();
+	virtual void bind();
+	virtual bool exists();
+	virtual void unbind();
+	virtual bool isFramebufferComplete();
+	virtual void rebindAs(GLenum type, bool unbind = true);
+};

@@ -15,7 +15,6 @@ public:
 	sol::load_result loaded_script;
 	sol::protected_function tick_function;
 
-	bool isEngineScript;
 	bool has_tick;
 	const char* source;
 	bool loaded;
@@ -25,7 +24,6 @@ public:
 
 	static sol::object __luaIndex(Instance* self, sol::this_state ts, const std::string& key);
 
-	virtual bool omitFromSave();
 	virtual int saveInstanceToFile(FILE* file);
 	virtual int loadInstanceFromFile(void* data, int off = 0);
 	virtual int getNumSaveBytes();

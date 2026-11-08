@@ -1,5 +1,6 @@
 #define MINIMP3_IMPLEMENTATION
 #include "SoundInstance.h"
+#include "wav_loader/AudioFile.h"
 std::map<std::string, AudioTrack> Audio::cachedAudioTracks;
 Audio::Audio() : Instance() {
 	name = "Audio";
@@ -75,7 +76,56 @@ void Audio::loadSound(std::string filePath) {
     }
 }
 void AudioTrack::loadFromFile(std::string filepath) {
+    std::string ext = filepath.substr(filepath.find_last_of(".") + 1);
+    debug_log("Loading sound from %s\n", filepath.c_str());
+    if (ext == "mp3") {
+        loadMP3(filepath);
+    }
+    else if (ext == "wav") {
+        loadWAV(filepath);
+    }
+    else {
+        debug_log("Audio error: %s is in unsupported format.\n", filepath.c_str());
+        loaded = false;
+    }
+}
+void AudioTrack::loadWAV(std::string filepath) {
+    this->filePath = filepath;
+    
+	AudioFile<short> audioFile;
+    
+    if (!audioFile.load(Resource::resolveFilePath(filePath))) {
+		debug_log("Error: file %s does not exist or loaded with errors.\n", filepath.c_str());
+        return;
+    }
+
+    frequency = audioFile.getSampleRate();
+
+    int channels = audioFile.getNumChannels(); 
+    size = audioFile.getNumSamplesPerChannel() * channels * sizeof(short); 
+
+    
+    std::vector<short> interleaved;
+const size_t samplesPerChannel = audioFile.samples[0].size();
+
+interleaved.resize(samplesPerChannel * channels);
+
+for (size_t i = 0; i < samplesPerChannel; ++i) {
+    for (int channel = 0; channel < channels; ++channel) {
+        interleaved[i * channels + channel] =
+            audioFile.samples[channel][i];
+    }
+}
+
+size = static_cast<int>(interleaved.size() * sizeof(short));
+generateAudioBuffer(interleaved.data(), channels);
+    loaded = true;
+    
+
+}
+void AudioTrack::loadMP3(std::string filepath) {
    this->filePath = filepath;
+   	std::vector<short> buffer;
 	std::ifstream a(Resource::resolveFilePath(filePath), std::ios::binary);
 
     if (!a) {
@@ -83,9 +133,9 @@ void AudioTrack::loadFromFile(std::string filepath) {
         loaded = false;
         return;
     }
-    debug_log("Loading sound from %s\n", filepath.c_str());
     std::vector<unsigned char> abuffer((std::istreambuf_iterator<char>(a)), std::istreambuf_iterator<char>());
     mp3dec_t mp3_dec;
+    mp3dec_frame_info_t info;
     mp3dec_init(&mp3_dec);
     short pcm[MINIMP3_MAX_SAMPLES_PER_FRAME];
     /*unsigned char *input_buf; - input byte stream*/
@@ -111,20 +161,30 @@ void AudioTrack::loadFromFile(std::string filepath) {
         bytes_consumed += info.frame_bytes;
     }
     size = buffer.size() * sizeof(short);
-    if (info.channels == 1 && info.hz <= 44100) { // Check sample rate suitability
+
+	frequency = info.hz;
+    //Used by Audio Track;
+    generateAudioBuffer(buffer.data(), info.channels);
+
+    loaded = true;
+
+}
+
+void AudioTrack::generateAudioBuffer(void* data, int channels) {
+
+    if (channels == 1 && frequency <= 44100) { // Check sample rate suitability
         AL_FORMAT = AL_FORMAT_MONO16; // minimp3 outputs 16-bit signed PCM by default
     }
-    else if (info.channels == 2 && info.hz <= 44100) {
+    else if (channels == 2 && frequency <= 44100) {
         AL_FORMAT = AL_FORMAT_STEREO16;
-    }
-    else {
+    } else {
         // Handle unsupported format or use OpenAL Soft extensions for higher rates/formats if available
         debug_log("Audio error: %s is in unsupported format.", filePath.c_str());
         // handle error
         return;
     }
 
-    //Used by Audio Track;
+	isStereo = (channels == 2);
     if (bufferId != 0) {
         alDeleteBuffers(1, &bufferId);
         bufferId = 0;
@@ -134,13 +194,12 @@ void AudioTrack::loadFromFile(std::string filepath) {
     if (err != AL_NO_ERROR) {
         debug_log("Audio loading error code [buffer generation]:  0x%X\n", err);
     }
-    alBufferData(bufferId, AL_FORMAT, buffer.data(), size, info.hz);
-
-    loaded = true;
+    alBufferData(bufferId, AL_FORMAT, data, size, frequency);
 
 }
-
 AudioTrack::AudioTrack() {
+    isStereo = false;
+    frequency = 0;
     size = 0;
 	bufferId = 0;
     loaded = false;
@@ -175,7 +234,10 @@ void Audio::finalizeLoad(inst_conv_map* conversionMap) {
     setAudioSource(this->audioName);
 }
 void Audio::update(float deltaTime, bool isStudio) {
-    if (renderLayer != eRenderLayer_World && !isEditor) {
+    if (!getAudioTrack()) {
+        return;
+	}
+    if (renderLayer != eRenderLayer_World && !isEditor && !getAudioTrack()->isStereo) {
         alSourcei(audioId, AL_SOURCE_RELATIVE, AL_FALSE);
         alSourcefv(audioId, AL_POSITION, (float*)&position);
     }
@@ -235,10 +297,10 @@ int Audio::getTimestampSamples() {
 }
 
 int Audio::getSourceSampleRate() {
-    if (cachedAudioTracks.count(audioName) == 0) {
+    if (!getAudioTrack()) {
         return 0;
     }
-    return cachedAudioTracks.at(audioName).info.hz;
+    return getAudioTrack()->frequency;
 }
 
 int Audio::getMaxSamples() {
@@ -292,4 +354,11 @@ if (!context) {
 alcMakeContextCurrent(context);
 return 0;
 // 3. Make the context CURRENT (Crucial!)
+}
+
+AudioTrack* Audio::getAudioTrack() {
+    if (cachedAudioTracks.count(audioName) == 0) {
+        return nullptr;
+    }
+    return &cachedAudioTracks[audioName];
 }

@@ -56,6 +56,7 @@ public:
 		InstanceType_UIRootNode,
 		InstanceType_Audio,
 		InstanceType_Folder,
+		InstanceType_PointLight,
 		InstanceType_Count
 	};
 	static const std::string instanceTypeNames[InstanceType_Count];
@@ -71,6 +72,8 @@ public:
 	int savedId;
 	int parentId;
 	int type;
+	//Is this created in the editor or should it be saved to the actual game
+	bool isEditorIntrinsic;
 	bool registered;
 	bool saveToFile;
 	std::string name;

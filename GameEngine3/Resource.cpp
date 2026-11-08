@@ -1,5 +1,5 @@
 #include "Resource.h"
-
+#include "Graphics/GraphicsWrapper.h"
 
 std::map<std::string, std::string> Resource::resourceFilePathMacros = {
 	{"res:/", "assets"},
@@ -17,7 +17,7 @@ std::string Resource::resolveFilePath(const std::string& path) {
 			resolvedPath.replace(pos, macroKey.length(), macroValue);
 		}
 	}
-	printf("Resolved file path: %s\n", resolvedPath.c_str());
+	debug_log("Resolved file path: %s\n", resolvedPath.c_str());
 	return resolvedPath;
 }
 Resource::Resource() : Instance() {
@@ -38,7 +38,7 @@ FILE* Resource::openResourceFile(std::string filepath, const char* mode) {
 	FILE* file;
 	fopen_s(&file, resolvedPath.c_str(), mode);
 	if (!file) {
-		printf("ERROR: Failed to open resource file '%s'.\n", resolvedPath.c_str());
+		debug_log("ERROR: Failed to open resource file '%s'.\n", resolvedPath.c_str());
 		return nullptr;
 	}
 	return file;

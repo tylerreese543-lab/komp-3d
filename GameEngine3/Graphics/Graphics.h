@@ -4,6 +4,8 @@
 #include "graphics_include.h"
 #include "matrix.h"
 #include "../ScriptEvent.h"
+#include "Buffer.h"
+#include "GraphicsWrapper.h"
 class Graphics;
 
 class MouseData {
@@ -83,15 +85,26 @@ public:
 
 	double deltaTime;
 	double lastFrameTime;
-
 	MouseData mouse_data;
 	KeyboardData keyboard_data;
 	GamepadData gamepad_data;
 	GLFWwindow* window;
 
+	GraphicsBuffer framebuffer_lighting;
+	GraphicsBuffer renderbuffer_lighting;
+
+	//pp lol :^)
+	GraphicsBuffer framebuffer_pp;
+	GraphicsBuffer renderbuffer_pp;
+
+	static vec4 backgroundColor;
+
 	int initializeWindow(int width, int height, const char* title);
+	void initializeDeferredRendering();
+
+	GraphicsBuffer* getFramebuffer(int fbo, bool renderbuffer = false);
 	void windowUpdate();
-	void clearWindow();
+	void clearWindow(int fboType = eFramebuffer_None);
 	bool shouldOpenWindow();
 	Graphics();
 	~Graphics();
@@ -101,5 +114,6 @@ public:
 	static void controllerConnectCallback(int jid, int event);
 	static void mouseSetButtonCallback(GLFWwindow* window, int button, int action, int mods);
 	static void keyboardSetKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+	static void resizeFramebufferCallback(GLFWwindow* window, int width, int height);
 };
 

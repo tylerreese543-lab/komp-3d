@@ -14,7 +14,6 @@ Camera::Camera() : Instance() {
 	type = InstanceType_Camera;
 	setPlanes(0.1, 1000.0f);
 	fov = 90;
-	isEditorCamera = false;
 	isOrthographic = false;
 }
 
@@ -110,7 +109,6 @@ Instance* Camera::clone_this() {
 	newCamera->far_plane = this->far_plane;
 	newCamera->fov = this->fov;
 	newCamera->aspect_ratio = this->aspect_ratio;
-	newCamera->isEditorCamera = this->isEditorCamera;
 	newCamera->isOrthographic = this->isOrthographic;
 	newCamera->updateMatrices();
 	return newCamera;
@@ -125,9 +123,6 @@ int Camera::getNumSaveBytes() {
 	return sizeof(vec3) * 2 + sizeof(float) * 4 + Instance::getNumSaveBytes() + sizeof(bool);
 }
 
-bool Camera::omitFromSave() {
-	return isEditorCamera == true;
-}
 
 void Camera::debugRender() {
 		//GL_LINES
@@ -164,13 +159,17 @@ void Camera::debugRender() {
 	vertexBuffer.calcSize(16);
 	unsigned int vao = 0;
 
-	ShaderProgram* program = (ShaderProgram*)getInstanceById(Scene::getCurrentScene()->hitboxShader);
+	ShaderProgram* program = (ShaderProgram*)getInstanceById(Scene::debugShader);
 	program->useProgram();
 	vertexBuffer.generate();
 	GenVAO(&vao, &vertexBuffer, nullptr, &program->layout);
 
 	Camera* camera = Scene::getCurrentScene()->getCamera();
 
+	glDepthMask(GL_TRUE);
+	glDisable(GL_CULL_FACE);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
 	mat4 transform = mat4::transform(position, vec3(1, 1, 1), rotation);
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], transform, GL_TRUE, 4);
 	program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->position);

@@ -35,7 +35,8 @@ void Instance::registerHierarchy() {
 	{ InstanceType_TextGeometry, InstanceType_Mesh },
 	{InstanceType_UIRootNode, InstanceType_Base},
 	{InstanceType_Audio, InstanceType_Base},
-	{InstanceType_Folder, InstanceType_Base}
+	{InstanceType_Folder, InstanceType_Base},
+	{InstanceType_PointLight, InstanceType_Base},
 	};
 }
 
@@ -76,7 +77,8 @@ const std::string Instance::instanceTypeNames[Instance::InstanceType_Count] = {
 	"Text",
 	"UIRoot",
 	"Audio",
-	"Folder"
+	"Folder",
+	"PointLight",
 };
 Instance::Instance() {
 	instanceId = -1;
@@ -87,6 +89,7 @@ Instance::Instance() {
 	savedId = -1;
 	registered = false;
 	saveToFile = true;
+	isEditorIntrinsic = false;
 	registerInstance(this);
 }
 
@@ -326,7 +329,7 @@ int Instance::getNumSaveBytes() {
 }
 
 bool Instance::omitFromSave() {
-	return false;
+	return isEditorIntrinsic;
 }
 
 bool Instance::omitFromHierarchyRender() {

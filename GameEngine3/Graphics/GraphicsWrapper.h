@@ -38,6 +38,7 @@ enum {
 	eSUniform_Material_Specularity,
 	eSUniform_CurrentTime,
 	eSUniform_Text_Font,
+	eSUniform_Material_Roughness,
 	eSUniform_MAX
 };
 
@@ -46,6 +47,8 @@ enum {
 	eMaterialTexture_AmbientOcclusion,
 	eMaterialTexture_Normal,
 	eMaterialTexture_Specular,
+	eMaterialTexture_Roughness,
+	eMaterialTexture_Position,
 	eMaterialTexture_MAX
 };
 enum {
@@ -53,4 +56,10 @@ enum {
 	eRenderLayer_World,
 	eRenderLayer_UI,
 	eRenderLayer_MAX
+};
+
+enum {
+	eFramebuffer_None = 0,
+	eFramebuffer_Lighting = 1,
+	eFramebuffer_PostProcess = 2
 };

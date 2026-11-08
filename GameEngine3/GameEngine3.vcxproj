@@ -199,6 +199,11 @@
       <AdditionalLibraryDirectories>$(SolutionDir)dependencies\GLFW_3.4\lib-vc2022;$(SolutionDir)dependencies\GLEW_2.1\lib;$(SolutionDir)dependencies\ASSIMPlib\lib;$(SolutionDir)dependencies\sol;$(SolutionDir)dependencies\sol\src;$(SolutionDir)dependencies\freetype-2.15.0;$(SolutionDir)dependencies\OPENAL_1.1\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>openal32.lib;efx.lib;freetype.lib;LuaLibrary.lib;assimp32.lib;opengl32.lib;glew32s.lib;glfw3.lib;gdi32.lib;user32.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy "$(ProjectDir)assets" "$(TargetDir)assets" /E /I /Y
+xcopy "$(ProjectDir)core" "$(TargetDir)core" /E /I /Y
+xcopy "$(ProjectDir)assimp-vc143-mt.dll" "$(TargetDir)" /Y /D</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Runtime|x64'">
     <ClCompile>
@@ -217,6 +222,11 @@
       <AdditionalLibraryDirectories>$(SolutionDir)dependencies\GLFW_3.4\lib-vc2022;$(SolutionDir)dependencies\GLEW_2.1\lib;$(SolutionDir)dependencies\ASSIMPlib\lib;$(SolutionDir)dependencies\sol;$(SolutionDir)dependencies\sol\src;$(SolutionDir)dependencies\freetype-2.15.0;$(SolutionDir)dependencies\OPENAL_1.1\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>openal32.lib;efx.lib;freetype.lib;LuaLibrary.lib;assimp32.lib;opengl32.lib;glew32s.lib;glfw3.lib;gdi32.lib;user32.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy "$(ProjectDir)assets" "$(TargetDir)assets" /E /I /Y
+xcopy "$(ProjectDir)core" "$(TargetDir)core" /E /I /Y
+xcopy "$(ProjectDir)assimp-vc143-mt.dll" "$(TargetDir)" /Y /D</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -237,6 +247,11 @@
       <AdditionalLibraryDirectories>$(SolutionDir)dependencies\GLFW_3.4\lib-vc2022;$(SolutionDir)dependencies\GLEW_2.1\lib;$(SolutionDir)dependencies\ASSIMPlib\lib;$(SolutionDir)dependencies\sol;$(SolutionDir)dependencies\sol\src;$(SolutionDir)dependencies\freetype-2.15.0;$(SolutionDir)dependencies\OPENAL_1.1\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>openal32.lib;efx.lib;freetype.lib;LuaLibrary.lib;assimp32.lib;opengl32.lib;glew32s.lib;glfw3.lib;gdi32.lib;user32.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy "$(ProjectDir)assets" "$(TargetDir)assets" /E /I /Y
+xcopy "$(ProjectDir)core" "$(TargetDir)core" /E /I /Y
+xcopy "$(ProjectDir)assimp-vc143-mt.dll" "$(TargetDir)" /Y /D</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_Runtime|x64'">
     <ClCompile>
@@ -257,6 +272,11 @@
       <AdditionalLibraryDirectories>$(SolutionDir)dependencies\GLFW_3.4\lib-vc2022;$(SolutionDir)dependencies\GLEW_2.1\lib;$(SolutionDir)dependencies\ASSIMPlib\lib;$(SolutionDir)dependencies\sol;$(SolutionDir)dependencies\sol\src;$(SolutionDir)dependencies\freetype-2.15.0;$(SolutionDir)dependencies\OPENAL_1.1\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>openal32.lib;efx.lib;freetype.lib;LuaLibrary.lib;assimp32.lib;opengl32.lib;glew32s.lib;glfw3.lib;gdi32.lib;user32.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy "$(ProjectDir)assets" "$(TargetDir)assets" /E /I /Y
+xcopy "$(ProjectDir)core" "$(TargetDir)core" /E /I /Y
+xcopy "$(ProjectDir)assimp-vc143-mt.dll" "$(TargetDir)" /Y /D</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="AABB.h" />
@@ -269,6 +289,7 @@
     <ClInclude Include="Graphics\GraphicsWrapper.h" />
     <ClInclude Include="Graphics\graphics_include.h" />
     <ClInclude Include="Graphics\matrix.h" />
+    <ClInclude Include="Light.h" />
     <ClInclude Include="LuaResource.h" />
     <ClInclude Include="Material.h" />
     <ClInclude Include="Scene.h" />
@@ -304,6 +325,7 @@
     <ClCompile Include="Graphics\GraphicsWrapper.cpp" />
     <ClCompile Include="Graphics\matrix.cpp" />
     <ClCompile Include="Graphics\VertexArrayObject.cpp" />
+    <ClCompile Include="Light.cpp" />
     <ClCompile Include="LuaResource.cpp" />
     <ClCompile Include="Material.cpp" />
     <ClCompile Include="Mesh.cpp" />

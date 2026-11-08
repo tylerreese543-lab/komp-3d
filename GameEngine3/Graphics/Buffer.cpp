@@ -73,3 +73,50 @@ void Buffer::calcSize(int count) {
 int Buffer::getCount() {
 	return size / element_size;
 }
+GraphicsBuffer::GraphicsBuffer() {
+	id = 0;
+	isFrameBuffer = true;
+	type = GL_FRAMEBUFFER;
+}
+
+void GraphicsBuffer::bind() {
+	if (isFrameBuffer) {
+		glBindFramebuffer(type, id);
+	}
+	else {
+		glBindRenderbuffer(GL_RENDERBUFFER, id);
+	}
+}
+
+void GraphicsBuffer::unbind() {
+	if (isFrameBuffer) {
+		glBindFramebuffer(type, 0);
+	}
+	else {
+		glBindRenderbuffer(GL_RENDERBUFFER, 0);
+	}
+}
+
+void GraphicsBuffer::generate() {
+	if (isFrameBuffer) {
+		glGenFramebuffers(1, &id);
+	}
+	else {
+		glGenRenderbuffers(1, &id);
+	}
+}
+
+bool GraphicsBuffer::isFramebufferComplete() {
+	bind();
+	return isFrameBuffer && glCheckFramebufferStatus(type) == GL_FRAMEBUFFER_COMPLETE;
+}
+
+void GraphicsBuffer::rebindAs(GLenum t, bool unb) {
+	if (unb) unbind();
+	this->type = t;
+	bind();
+}
+
+bool GraphicsBuffer::exists() {
+	return id > 0;
+}

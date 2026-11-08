@@ -9,9 +9,13 @@
 #include <OPENAL_1.1/include/al.h>
 #include <OPENAL_1.1/include/alc.h>
 class AudioTrack {
+protected:
+	void loadMP3(std::string filepath);
+	void loadWAV(std::string filepath);
+	void generateAudioBuffer(void* data, int channels);
 public:
-	std::vector<short> buffer;
-	mp3dec_frame_info_t info;
+	bool isStereo;
+	int frequency;
 	int size;
 	bool loaded;
 	unsigned int bufferId;
@@ -27,7 +31,7 @@ public:
 class Audio : public Instance
 {
 protected:
-public:
+	
 public:
 	static std::map<std::string, AudioTrack> cachedAudioTracks;
 	static int InitializeAudioEngine();
@@ -41,6 +45,7 @@ public:
 	unsigned int audioId;
 	Audio();
 	virtual ~Audio();
+	AudioTrack* getAudioTrack();
 	virtual void update(float deltaTime, bool isStudio);
 	void setAudioSource(std::string audio);
 	static void loadSound(std::string filepath);

@@ -97,11 +97,21 @@ ShaderProgram::ShaderProgram() : Resource() {
 	setDefaultShaderUniform(eSUniform_Material_Specularity,			"m_Specularity");
 	setDefaultShaderUniform(eSUniform_CurrentTime,					"u_CurrentTime");
 	setDefaultShaderUniform(eSUniform_Text_Font,					"tx_TextGlyphs");
+	setDefaultShaderUniform(eSUniform_Material_Roughness,			"m_Roughness");
 
 	setDefaultMaterialTexture(eMaterialTexture_Diffuse,				"t_Diffuse");
 	setDefaultMaterialTexture(eMaterialTexture_AmbientOcclusion,	"t_AmbientOcclusion");
 	setDefaultMaterialTexture(eMaterialTexture_Normal,				"t_Normal");
 	setDefaultMaterialTexture(eMaterialTexture_Specular,			"t_Specular");
+	setDefaultMaterialTexture(eMaterialTexture_Position,			"t_Position");
+	setDefaultMaterialTexture(eMaterialTexture_Roughness,			"t_Roughness");
+
+	setDefaultOutputPort(eMaterialTexture_Diffuse,					"g_Diffuse");
+	setDefaultOutputPort(eMaterialTexture_AmbientOcclusion,			"g_AmbientOcclusion");
+	setDefaultOutputPort(eMaterialTexture_Normal,					"g_Normal");
+	setDefaultOutputPort(eMaterialTexture_Specular,					"g_Specular");
+	setDefaultOutputPort(eMaterialTexture_Position,					"g_Position");
+	setDefaultOutputPort(eMaterialTexture_Roughness,				"g_Roughness");
 }
 
 ShaderProgram::ShaderProgram(std::string vs, std::string fs) : ShaderProgram() {
@@ -136,6 +146,12 @@ int ShaderProgram::linkProgram() {
 		delete[] message;
 		return -1;
 	}
+
+	GLuint lightBlockIndex = glGetUniformBlockIndex(this->id, "LightData");
+    if (lightBlockIndex != GL_INVALID_INDEX) {
+        glUniformBlockBinding(this->id, lightBlockIndex, 1);
+    }
+
 	return 0;
 }
 
@@ -146,6 +162,8 @@ int ShaderProgram::createProgram(bool reloadShaders) {
 		id = 0;
 	}
 	id = glCreateProgram();
+
+
 	std::vector<ShaderResource*> shaders;
 	for (Instance* child : children) {
 		if (child->type != InstanceType_ShaderResource) {
@@ -160,6 +178,9 @@ int ShaderProgram::createProgram(bool reloadShaders) {
 		}
 		shader->compileShader();
 		attachShader(shader);
+	}	
+	for (int i = 0; i < eMaterialTexture_MAX; ++i) {
+		glBindFragDataLocation(id, i, shaderOutputNames[i].c_str());
 	}
 	linkProgram();
 	for (ShaderResource* shader : shaders) {
@@ -330,6 +351,12 @@ void ShaderProgram::setDefaultMaterialTexture(int index, std::string name) {
 	}
 }
 
+void ShaderProgram::setDefaultOutputPort(int index, std::string name) {
+	if (index >= 0 && index < eMaterialTexture_MAX) {
+		shaderOutputNames[index] = name;
+	}
+}
+
 Instance* ShaderResource::clone_this() {
 	ShaderResource* s = (ShaderResource*)registerInstance(new ShaderResource(*this), true);
 	s->id = 0;
@@ -420,6 +447,9 @@ int ShaderProgram::saveInstanceToFile(FILE* file) {
 	for(int i = 0; i < eMaterialTexture_MAX; ++i) {
 		offset += fwrite(shaderTextureNames[i].data(), shaderTextureNames[i].size() + 1, 1, file);
 	}
+	for(int i = 0; i < eMaterialTexture_MAX; ++i) {
+		offset += fwrite(shaderOutputNames[i].data(), shaderOutputNames[i].size() + 1, 1, file);
+	}
 	return offset;
 }
 
@@ -439,6 +469,10 @@ int ShaderProgram::loadInstanceFromFile(void* data, int off) {
 	for (int i = 0; i < eMaterialTexture_MAX; ++i) {
 		shaderTextureNames[i] = std::string((char*)offset(data, o));
 		o += shaderTextureNames[i].size() + 1;
+	}
+	for (int i = 0; i < eMaterialTexture_MAX; ++i) {
+		shaderOutputNames[i] = std::string((char*)offset(data, o));
+		o += shaderOutputNames[i].size() + 1;
 	}
 	debug_log("ShaderProgram loaded from file: %s\n", name.c_str());
 	return o - off;
@@ -472,7 +506,9 @@ int ShaderProgram::getNumSaveBytes() {
 	}
 	for(int i = 0; i < eMaterialTexture_MAX; ++i) {
 		size += shaderTextureNames[i].size() + 1;
+		size += shaderOutputNames[i].size() + 1;
 	}
+
 	return size;
 }
 
@@ -493,6 +529,7 @@ Instance* ShaderProgram::clone_this() {
 	}
 	for (int i = 0; i < eMaterialTexture_MAX; ++i) {
 		s->shaderTextureNames[i] = shaderTextureNames[i];
+		s->shaderOutputNames[i] = shaderOutputNames[i];
 	}
 	return s;
 }

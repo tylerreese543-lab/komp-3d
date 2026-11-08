@@ -1,6 +1,9 @@
 #include "Graphics.h"
 #include "../EngineGUI.h"
+#include "../TextureResource.h"
 Graphics* Graphics::instance = nullptr;
+
+vec4 Graphics::backgroundColor = vec4(0.0, 0.0, 0.0, 1.0);
 Graphics::Graphics() {
 	viewportWidth = 800;
 	viewportHeight = 600;
@@ -52,16 +55,59 @@ int Graphics::initializeWindow(int width, int height, const char* title) {
 	return 0;
 }
 
-void Graphics::clearWindow() {
+void Graphics::initializeDeferredRendering() {
+	//Lighting
+	framebuffer_lighting.generate();
+	renderbuffer_lighting.isFrameBuffer = false;
+	renderbuffer_lighting.generate();
+
+	framebuffer_lighting.bind();
+	renderbuffer_lighting.bind();
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, viewportWidth, viewportHeight);
+
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, renderbuffer_lighting.id);
+
+
+	if (framebuffer_lighting.isFramebufferComplete()) {
+		printf("Framebuffer Lighting complete\n");
+	}
+	framebuffer_lighting.unbind();
+	renderbuffer_lighting.unbind();
+
+	//PP
+	framebuffer_pp.generate();
+	renderbuffer_pp.isFrameBuffer = false;
+	renderbuffer_pp.generate();
+
+	framebuffer_pp.bind();
+	renderbuffer_pp.bind();
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, viewportWidth, viewportHeight);
+
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, renderbuffer_pp.id);
+
+
+	if (framebuffer_pp.isFramebufferComplete()) {
+		printf("Framebuffer PP complete\n");
+	}
+	framebuffer_pp.unbind();
+	renderbuffer_pp.unbind();
+}
+void Graphics::clearWindow(int fbo) {
 	glDepthMask(GL_TRUE); 
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	deltaTime = (glfwGetTime() - lastFrameTime);
-	currentFPS = 1.0 / deltaTime;
-	lastFrameTime = glfwGetTime();
+	if (fbo != eFramebuffer_None) {
+		getFramebuffer(fbo)->bind();
+	}
+	glClearColor(backgroundColor.X, backgroundColor.Y, backgroundColor.Z, backgroundColor.W); // keep it black so it doesn't leak into g-buffer
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+	if (fbo != eFramebuffer_None) {
+		getFramebuffer(fbo)->unbind();
+	}
 }
 void Graphics::windowUpdate() {
 	glfwGetWindowSize(window, &windowWidth, &windowHeight);
 	if (matchViewportToWindow) {
+		viewportWidth = windowWidth;
+		viewportHeight = windowHeight;
 		glViewport(0, 0, windowWidth, windowHeight);
 	}
 	mouse_data.update();
@@ -95,6 +141,32 @@ void Graphics::keyboardSetKeyCallback(GLFWwindow* window, int key, int scancode,
 
 void Graphics::controllerConnectCallback(int jid, int event) {
 	getInstance()->gamepad_data.ControllerConnectCallback(jid, event);
+}
+
+void Graphics::resizeFramebufferCallback(GLFWwindow* window, int width, int height) {
+
+	if (getInstance()->matchViewportToWindow) {
+		getInstance()->viewportWidth = width;
+		getInstance()->viewportHeight = height;
+	}
+	for (auto pair : Instance::world) {
+		if (pair.second) {
+			if (Instance::isInstanceOf(pair.second->type, Instance::InstanceType_ImageResource)) {
+				ImageResource* img = (ImageResource*)pair.second;
+				if (img->frameBufferType > 0 && img->resizeToWindow) {
+					img->loadAsFramebufferTarget();
+				}
+			}
+		}
+	}
+
+	if (getInstance()->renderbuffer_lighting.exists() && getInstance()->renderbuffer_pp.exists()) {
+		getInstance()->renderbuffer_lighting.bind();
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, getInstance()->viewportWidth, getInstance()->viewportHeight);
+
+		getInstance()->renderbuffer_pp.bind();
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, getInstance()->viewportWidth, getInstance()->viewportHeight);
+	}
 }
 MouseData::MouseData() {
 	x = 0;
@@ -271,4 +343,23 @@ Gamepad::Gamepad() {
 
 	isConnected = false;
 	joystickId = 0;
+}
+
+GraphicsBuffer* Graphics::getFramebuffer(int fbo, bool renderbuffer) {
+	if (renderbuffer) {
+		if (fbo == eFramebuffer_Lighting) {
+			return &renderbuffer_lighting;
+		}
+		else if (fbo == eFramebuffer_PostProcess) {
+			return &renderbuffer_pp;
+		}
+	}
+	else {
+		if (fbo == eFramebuffer_Lighting) {
+			return &framebuffer_lighting;
+		}
+		else if (fbo == eFramebuffer_PostProcess) {
+			return &framebuffer_pp;
+		}
+	}
 }

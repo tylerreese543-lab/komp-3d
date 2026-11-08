@@ -7,21 +7,28 @@ const std::string Material::containsMaterialTexture[] = {
 	"m_HasAmbientOcclusionTexture",
 	"m_HasNormalTexture",
 	"m_HasSpecularTexture",
+	"m_HasPositionTexture",
+	"m_HasRoughnessTexture"
 };
 Material::Material() : Instance() {
 
-	diffuseColor = vec3(1.0);
-	specularity = 1.0f;
+	diffuseColor = vec4(1.0, 1.0, 1.0, 1.0);
+	specularity = 32;
+	roughness = 0.5;
 
 	//Texture Resource Initialization
 	textures[eMaterialTexture_Diffuse] = -1;
 	textures[eMaterialTexture_AmbientOcclusion] = -1;
 	textures[eMaterialTexture_Normal] = -1;
 	textures[eMaterialTexture_Specular] = -1;
+	textures[eMaterialTexture_Position] = -1;
+	textures[eMaterialTexture_Roughness] = -1;
 	shader = -1;
+	frameBufferType = eFramebuffer_None;
 	type = InstanceType_Material;
 	name = "Material";
 	isTransparent = false;
+	isLit = true;
 	SetTextureUseFlags(false, false, false, false);
 }
 
@@ -30,6 +37,8 @@ void Material::SetTextureUseFlags(bool useDiffuse, bool useAmbientOcclusion, boo
 	textureUseFlags[eMaterialTexture_AmbientOcclusion] = useAmbientOcclusion;
 	textureUseFlags[eMaterialTexture_Normal] = useNormal;
 	textureUseFlags[eMaterialTexture_Specular] = useSpecular;
+	textureUseFlags[eMaterialTexture_Position] = false;
+	textureUseFlags[eMaterialTexture_Roughness] = false;
 }
 
 //Searches through all of it's children for viable textures.
@@ -76,10 +85,45 @@ void Material::applyMaterial() {
 		}
 	}
 
-	program->setUniform3f(program->shaderUniformNames[eSUniform_Material_DiffuseColor], diffuseColor.X, diffuseColor.Y, diffuseColor.Z);
-	program->setUniform3f(program->shaderUniformNames[eSUniform_Material_Specularity], specularity);
+	program->setUniform4f(program->shaderUniformNames[eSUniform_Material_DiffuseColor], diffuseColor);
+	program->setUniform1i(program->shaderUniformNames[eSUniform_Material_Specularity], specularity);
+	program->setUniform1f(program->shaderUniformNames[eSUniform_Material_Roughness], roughness);
 }
+void Material::applyMaterialFramebuffer() {
+	
+	ShaderProgram* program = isShader(getInstanceById(shader));
+	if (!program) return;
+	
+	Graphics::getInstance()->getFramebuffer(frameBufferType)->bind();
+	program->useProgram();
+	GLenum frameBufferAttachments[eMaterialTexture_MAX];
+	for (int i = 0; i < eMaterialTexture_MAX; ++i) {
+		if (textureUseFlags[i] == true) {
+			program->unbindTexture(program->shaderTextureNames[i], i);
+			ImageResource* img = isImage(getInstanceById(textures[i]));
+			if (!img) {
+			frameBufferAttachments[i] = GL_NONE;
+			continue;
+			};
+			int boundSuccessfully = program->bindTexture(program->shaderTextureNames[i], img, i);
+			if (boundSuccessfully == 0) {
+				frameBufferAttachments[i] = (GL_COLOR_ATTACHMENT0 + img->textureType);
+			}
+			else {
+				frameBufferAttachments[i] = GL_NONE;
+			}
+			program->unbindTexture(program->shaderTextureNames[i], i);
+		}
+		else {
+			frameBufferAttachments[i] = GL_NONE;
+		}
+	}
 
+	glDrawBuffers(eMaterialTexture_MAX, frameBufferAttachments);
+	Graphics::getInstance()->getFramebuffer(frameBufferType)->unbind();
+	//program->setUniform3f(program->shaderUniformNames[eSUniform_Material_DiffuseColor], diffuseColor.X, diffuseColor.Y, diffuseColor.Z);
+	//program->setUniform1f(program->shaderUniformNames[eSUniform_Material_Specularity], specularity);
+}
 ImageResource* Material::isImage(Instance* image) {
 	if (!image) return nullptr;
 	if (image->type != InstanceType_ImageResource) return nullptr; //Skip any non-resources
@@ -133,20 +177,25 @@ Instance* Material::clone_this() {
 
 int Material::saveInstanceToFile(FILE* file) {
 	Instance::saveInstanceToFile(file);
-	fwrite(&diffuseColor, sizeof(vec3), 1, file);
-	fwrite(&specularity, sizeof(float), 1, file);
+	fwrite(&diffuseColor, sizeof(vec4), 1, file);
+	fwrite(&specularity, sizeof(int), 1, file);
+	fwrite(&roughness, sizeof(int), 1, file);
 	fwrite(&shader, sizeof(int), 1, file);
 	fwrite(textures, sizeof(int), eMaterialTexture_MAX, file);
 	fwrite(textureUseFlags, sizeof(bool), eMaterialTexture_MAX, file);
+	fwrite(&isTransparent, sizeof(bool), 1, file);
+	fwrite(&isLit, sizeof(bool), 1, file);
 	return 0; //TODO: return the size of the data written to the file
 }
 
 int Material::loadInstanceFromFile(void* data, int off) {
 	int o = off;
 	o += Instance::loadInstanceFromFile(data, o); //Load the base instance data first
-	diffuseColor = *(vec3*)offset(data, o);
-	o += sizeof(vec3);
-	specularity = *(float*)offset(data, o);
+	diffuseColor = *(vec4*)offset(data, o);
+	o += sizeof(vec4);
+	specularity = *(int*)offset(data, o);
+	o += sizeof(int);
+	roughness = *(float*)offset(data, o);
 	o += sizeof(float);
 	shader = *(int*)offset(data, o);
 	o += sizeof(int);
@@ -154,11 +203,15 @@ int Material::loadInstanceFromFile(void* data, int off) {
 	o += sizeof(int) * eMaterialTexture_MAX;
 	memcpy(textureUseFlags, offset(data, o), sizeof(bool) * eMaterialTexture_MAX);
 	o += sizeof(bool) * eMaterialTexture_MAX;
+	isTransparent = *(bool*)offset(data, o);
+	o += sizeof(bool);
+	isLit = *(bool*)offset(data, o);
+	o += sizeof(bool);
 	return o - off; // Return the number of bytes read
 }
 
 int Material::getNumSaveBytes() {
-	return Instance::getNumSaveBytes() + sizeof(vec3) + sizeof(float) + sizeof(int) + sizeof(int) * eMaterialTexture_MAX + sizeof(bool) * eMaterialTexture_MAX;
+	return Instance::getNumSaveBytes() + sizeof(vec4) + sizeof(float) + (sizeof(int) * 2) + (sizeof(int) * eMaterialTexture_MAX) + (sizeof(bool) * eMaterialTexture_MAX) + (2 * sizeof(bool);
 }
 
 void Material::finalizeLoad(inst_conv_map* conversionMap) {

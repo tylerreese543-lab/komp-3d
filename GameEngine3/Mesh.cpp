@@ -1,4 +1,5 @@
 #include "Mesh.h"
+#include "Light.h"
 std::set<Mesh*> Mesh::render_objects;
 vec3 Mesh::cameraPosition;
 
@@ -17,6 +18,7 @@ Geometry::Geometry() : Resource() {
 	name = "Geometry";
 	type = InstanceType_Geometry;
 	isGeometryInterleaved = false;
+	autoCreateSmoothedNormals = false;
 	clearBuffers();
 	setVBOFlags(false, false, false, false, false);
 }
@@ -135,7 +137,7 @@ Mesh::Mesh() : Instance() {
 	VAODirty = true;
 	render_objects.insert(this);
 
-	cull = false;
+	cull = true;
 
 	renderLayer = eRenderLayer_World;
 }
@@ -173,7 +175,7 @@ void Mesh::render(Camera* camera, bool transparent, int renderLayerTarget) {
 		return;
 	}
 
-	if (camera == nullptr) {
+	if (camera == nullptr && !isEditorIntrinsic) {
 		debug_log("Abort rendering of '%s' - has no camera attached.\n", name.c_str());
 		return;
 	}
@@ -189,13 +191,24 @@ void Mesh::render(Camera* camera, bool transparent, int renderLayerTarget) {
 		VAODirty = false;
 	}
 	
-
-	setupRenderSettings(transparent, cull);
+	if (isEditorIntrinsic) {
+		setupRenderSettings(false, false);
+		//Do not write me do depth if I am the render quad!
+		glDepthMask(GL_FALSE);
+		glDisable(GL_DEPTH_TEST);
+	}
+	else {
+		setupRenderSettings(transparent, cull);
+	}
 	calcTransform();
+	program->setUniform3f("l_AmbientLight", Light::ambient);
+	program->setUniform1i("l_NumLights", Light::numLights);
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], transform, GL_TRUE, 4);
-	program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->position);
-	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraLookMatrix], camera->look, GL_TRUE, 3);
-	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraProjectionMatrix], camera->projection, GL_TRUE, 4);
+	if (!isEditorIntrinsic || camera) {
+		program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->position);
+		program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraLookMatrix], camera->look, GL_TRUE, 3);
+		program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraProjectionMatrix], camera->projection, GL_TRUE, 4);
+	}
 	program->setUniform1f(program->shaderUniformNames[eSUniform_CurrentTime], Graphics::getInstance()->lastFrameTime);
 	g->render();
 	
@@ -210,7 +223,11 @@ void Geometry::autoSearchVBO() {
 void Geometry::loadFromFile(std::string filepath, int meshID, int ImporterFlags) {
 	Assimp::Importer importer;
 	filePath = filepath;
-	const aiScene* scene = importer.ReadFile(resolveFilePath(filepath), ImporterFlags);
+	int smoothNormals = 0;
+	if (autoCreateSmoothedNormals) {
+		smoothNormals = aiProcess_GenSmoothNormals | aiProcess_ForceGenNormals;
+	}
+	const aiScene* scene = importer.ReadFile(resolveFilePath(filepath), ImporterFlags | smoothNormals);
 	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
 		std::cout << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
 		return;
@@ -258,6 +275,7 @@ void Geometry::loadFromFile(std::string filepath, int meshID, int ImporterFlags)
 		ebo.data = malloc(sizeIndices * sizeof(unsigned int));
 		ebo.calcSize(sizeIndices);
 
+
 		unsigned int* int_data = (unsigned int*)ebo.data;
 		for (int i = 0; i < mesh->mNumFaces; ++i) {
 			int_data[(i * 3) + 0] = mesh->mFaces[i].mIndices[0];
@@ -282,6 +300,7 @@ int Geometry::saveInstanceToFile(FILE* file) {
 	offset += Resource::saveInstanceToFile(file);
 	offset += fwrite(&isGeometryInterleaved, sizeof(bool), 1, file);
 	offset += fwrite(&vboFlags, sizeof(bool), eVBO_MAX, file);
+	offset += fwrite(&autoCreateSmoothedNormals, sizeof(bool), 1, file);
 	return offset;
 }
 
@@ -292,6 +311,8 @@ int Geometry::loadInstanceFromFile(void* data, int off) {
 	o += sizeof(bool);
 	memcpy(&vboFlags, offset(data, o), sizeof(bool) * eVBO_MAX);
 	o += sizeof(bool) * eVBO_MAX;
+	memcpy(&autoCreateSmoothedNormals, offset(data, o), sizeof(bool));
+	o += sizeof(bool);
 	//TODO: store/load importer flags/mesh ID but for now just use the defaults
 	loadFromFile(filePath);
 	return o - off;
@@ -311,70 +332,77 @@ int Mesh::distanceQsortCompareFunction(const void* a, const void* b) {
 
 
 }
-void Mesh::renderAllMeshes(Camera* camera, Camera* ui) {
+void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 	if (!camera)  {
 		debug_log("No camera provided for rendering meshes. Aborting render.\n");
 		return;
 	}
 	std::vector<Mesh*> transparent_objects; // To be sorted by distance
 	std::set<Mesh*> ui_objects;
+	std::set<Mesh*>unlit_objects;
 	for (Mesh* m : render_objects) {
 		//debug_log("Rendering mesh '%s' (ID: %d) with geometry ID: %d and material ID: %d\n", m->name.c_str(), m->instanceId, m->geometry, m->material);
 
 		Material* material = (Material*)getInstanceById(m->material);
-		if (m->renderLayer != eRenderLayer_World) {
-			if (m->renderLayer == eRenderLayer_UI) {
-				ui_objects.insert(m);
+		if (material && !m->isEditorIntrinsic) {
+			bool materialTransparent = material->isTransparent || material->diffuseColor.W < 0.99f;
+			if (m->renderLayer != eRenderLayer_World) {
+				if (passNum == 2 && m->renderLayer == eRenderLayer_UI && ui) {
+					if (materialTransparent) {
+						transparent_objects.push_back(m);
+					}
+					else ui_objects.insert(m);
+				}
+				continue; 
 			}
-			continue;
-		}
-		if (material) {
-			if (material->isTransparent == true) {
-				transparent_objects.push_back(m);
-			}
-			else {
+			//Pass 0 - ONLY render non-transparent and lit objects
+			if (passNum == 0 && !materialTransparent && material->isLit) {
 				m->render(camera);
 			}
-		}
-	}
-	Mesh::cameraPosition = camera->position;
-	std::qsort(transparent_objects.data(), transparent_objects.size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
-	for (Mesh* m : transparent_objects) {
-		//debug_log("Rendering mesh '%s' (ID: %d) with geometry ID: %d and material ID: %d\n", m->name.c_str(), m->instanceId, m->geometry, m->material);
-
-		m->render(camera, true);
-	}
-	transparent_objects.clear();
-	if (ui) {
-		for (Mesh* m : ui_objects) {
-			//debug_log("Rendering mesh '%s' (ID: %d) with geometry ID: %d and material ID: %d\n", m->name.c_str(), m->instanceId, m->geometry, m->material);
-
-			Material* material = (Material*)getInstanceById(m->material);
-			if (material) {
-				if (material->isTransparent == true) {
+			else if (passNum == 1 && (materialTransparent || !material->isLit)) {
+				if (materialTransparent) {
 					transparent_objects.push_back(m);
 				}
 				else {
-					m->render(ui, false, eRenderLayer_UI);
+					m->render(camera);
 				}
 			}
 		}
-		Mesh::cameraPosition = ui->position;
+	}
+	if (passNum == 1) {
+		Mesh::cameraPosition = camera->position;
 		std::qsort(transparent_objects.data(), transparent_objects.size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
 		for (Mesh* m : transparent_objects) {
-			//debug_log("Rendering mesh '%s' (ID: %d) with geometry ID: %d and material ID: %d\n", m->name.c_str(), m->instanceId, m->geometry, m->material);
+			
+			if (!m->isEditorIntrinsic) {
+				m->render(camera, true);
+			}
+		}
+	}
 
-			m->render(ui, true, eRenderLayer_UI);
+	if (passNum == 2 && ui) {
+
+		for (Mesh* m : ui_objects) {
+
+				m->render(ui, false, eRenderLayer_UI);
+		}
+		Mesh::cameraPosition = camera->position;
+		std::qsort(transparent_objects.data(), transparent_objects.size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
+		for (Mesh* m : transparent_objects) {
+	
+			if (!m->isEditorIntrinsic) {
+				m->render(ui, true, eRenderLayer_UI);
+			}
 		}
 	}
 }
 
 int Geometry::getNumSaveBytes() {
-	return Resource::getNumSaveBytes() + sizeof(bool) + sizeof(bool) * eVBO_MAX;
+	return Resource::getNumSaveBytes() + (sizeof(bool) * (eVBO_MAX + 2));
 }
 
 int Mesh::getNumSaveBytes() {
-	return Instance::getNumSaveBytes() + (sizeof(vec3) * 3) + (2 * sizeof(int)) + (2 * sizeof(bool));
+	return Instance::getNumSaveBytes() + (sizeof(vec3) * 3) + (3 * sizeof(int)) + (2 * sizeof(bool));
 }
 
 int Mesh::destroy() {
@@ -398,6 +426,7 @@ int Mesh::saveInstanceToFile(FILE* file) {
 	offset += fwrite(&material, sizeof(int), 1, file);
 	offset += fwrite(&visible, sizeof(bool), 1, file);
 	offset += fwrite(&cull, sizeof(bool), 1, file);
+	offset += fwrite(&renderLayer, sizeof(int), 1, file);
 	return offset;
 }
 
@@ -419,6 +448,8 @@ int Mesh::loadInstanceFromFile(void* data, int off) {
 	o += sizeof(bool);
 	cull = *(bool*)offset(data, o);
 	o += sizeof(bool);
+	renderLayer = *(int*)offset(data, o);
+	o += sizeof(int);
 	debug_log("Loaded geometry ID: %d, material ID: %d, visible: %d\n", geometry, material, visible);
 	return o - off;
 }
@@ -441,6 +472,7 @@ ProceduralGeometry::ProceduralGeometry() : Geometry() {
 	type = InstanceType_ProceduralGeometry;
 	numExtraFloats = 0;
 	bufferUpdateMode = GL_DYNAMIC_DRAW;
+	isGeometryInterleaved = false;
 }
 
 ProceduralGeometry::~ProceduralGeometry() {
@@ -633,6 +665,14 @@ void ProceduralGeometry::generateBuffers() {
 		}
 	}
 	
+	ebo.generate();
+	for (int i = eVBO_Positions; i < eVBO_MAX; ++i) {
+		if (vboFlags[i]) {
+			vbos[i].generate();
+		}
+	}
+
+	updateBuffers();
 	buffersDirty = false;
 }
 
@@ -743,7 +783,7 @@ void Mesh::setupRenderSettings(bool transparent, bool backfaceCulling) {
 	glDepthFunc(GL_LEQUAL);
 	if (backfaceCulling) {
 		glEnable(GL_CULL_FACE);
-		glCullFace(GL_FRONT);
+		glCullFace(GL_BACK);
 	}
 	else {
 		glDisable(GL_CULL_FACE);
