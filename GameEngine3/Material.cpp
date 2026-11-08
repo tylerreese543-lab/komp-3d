@@ -83,6 +83,9 @@ void Material::applyMaterial() {
 			int boundSuccessfully = program->bindTexture(program->shaderTextureNames[i], img, i);
 			program->setUniform1i(containsMaterialTexture[i], boundSuccessfully == 0 ? 1 : 0);
 		}
+		else {
+			program->setUniform1i(containsMaterialTexture[i], 0);
+		}
 	}
 
 	program->setUniform4f(program->shaderUniformNames[eSUniform_Material_DiffuseColor], diffuseColor);
@@ -211,7 +214,7 @@ int Material::loadInstanceFromFile(void* data, int off) {
 }
 
 int Material::getNumSaveBytes() {
-	return Instance::getNumSaveBytes() + sizeof(vec4) + sizeof(float) + (sizeof(int) * 2) + (sizeof(int) * eMaterialTexture_MAX) + (sizeof(bool) * eMaterialTexture_MAX) + (2 * sizeof(bool);
+	return Instance::getNumSaveBytes() + sizeof(vec4) + sizeof(float) + (sizeof(int) * 2) + (sizeof(int) * eMaterialTexture_MAX) + (sizeof(bool) * eMaterialTexture_MAX) + (2 * sizeof(bool));
 }
 
 void Material::finalizeLoad(inst_conv_map* conversionMap) {
