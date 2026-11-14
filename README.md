@@ -1,6 +1,6 @@
-# GameEngine3
+# KOMP-3D
 
-This is a simple game engine that I have been working on. Will likely change the name later to something a little more professional.
+C++-written 3D game engine using OpenGL as graphics. Useful to create video games, interactive experiences, and many more.
 
 ROADMAP
 
