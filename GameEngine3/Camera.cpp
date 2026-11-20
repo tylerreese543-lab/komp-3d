@@ -5,7 +5,7 @@
 #include "Graphics/Buffer.h"
 #include "Graphics/VertexArrayObject.h"
 #include "Scene.h"
-Camera::Camera() : Instance() {
+Camera::Camera() : SpatialInstance() {
 
 	near_plane = 0;
 	far_plane = 0;
@@ -51,6 +51,8 @@ void Camera::updateMatrices() {
 			0, 0, 1, 0
 		);
 	}
+
+	vec3 rotation = getWorldRotation();
 	look = mat3::yxz(-rotation.X, -rotation.Y, -rotation.Z);
 	moveDirection2D = mat3::yrot(-rotation.Y);
 }
@@ -69,9 +71,7 @@ void Camera::setPosition(float x, float y, float z) {
 }
 
 int Camera::saveInstanceToFile(FILE* file) {
-	Instance::saveInstanceToFile(file);
-	fwrite(&position, sizeof(vec3), 1, file);
-	fwrite(&rotation, sizeof(vec3), 1, file);
+	SpatialInstance::saveInstanceToFile(file);
 	fwrite(&near_plane, sizeof(float), 1, file);
 	fwrite(&far_plane, sizeof(float), 1, file);
 	fwrite(&fov, sizeof(float), 1, file);
@@ -82,11 +82,7 @@ int Camera::saveInstanceToFile(FILE* file) {
 
 int Camera::loadInstanceFromFile(void* data, int off) {
 	int o = off;
-	o += Instance::loadInstanceFromFile(data, o); //Load the base instance data first
-	position = *(vec3*)offset(data, o);
-	o += sizeof(vec3);
-	rotation = *(vec3*)offset(data, o);
-	o += sizeof(vec3);
+	o += SpatialInstance::loadInstanceFromFile(data, o); //Load the base instance data first
 	near_plane = *(float*)offset(data, o);
 	o += sizeof(float);
 	far_plane = *(float*)offset(data, o);
@@ -103,6 +99,8 @@ int Camera::loadInstanceFromFile(void* data, int off) {
 
 Instance* Camera::clone_this() {
 	Camera* newCamera = (Camera*)registerInstance(new Camera(), true);
+	newCamera->name = this->name;
+	newCamera->setParent(this->parent);
 	newCamera->position = this->position;
 	newCamera->rotation = this->rotation;
 	newCamera->near_plane = this->near_plane;
@@ -120,7 +118,7 @@ void Camera::update(float deltaTime, bool isStudio) {
 }
 
 int Camera::getNumSaveBytes() {
-	return sizeof(vec3) * 2 + sizeof(float) * 4 + Instance::getNumSaveBytes() + sizeof(bool);
+	return sizeof(float) * 4 + SpatialInstance::getNumSaveBytes() + sizeof(bool);
 }
 
 
@@ -170,13 +168,13 @@ void Camera::debugRender() {
 	glDisable(GL_CULL_FACE);
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
-	mat4 transform = mat4::transform(position, vec3(1, 1, 1), rotation);
+	mat4 transform = getWorldTransform();
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], transform, GL_TRUE, 4);
-	program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->position);
+	program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->getWorldPosition());
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraLookMatrix], camera->look, GL_TRUE, 3);
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraProjectionMatrix], camera->projection, GL_TRUE, 4);
 	program->setUniform1f(program->shaderUniformNames[eSUniform_CurrentTime], Graphics::getInstance()->lastFrameTime);
-
+	program->setUniform3f(program->shaderUniformNames[eSUniform_Material_DiffuseColor], Graphics::debugDefaultColor);
 	glBindVertexArray(vao);
 	glDrawArrays(GL_LINES, 0, 16);
 	glBindVertexArray(0);

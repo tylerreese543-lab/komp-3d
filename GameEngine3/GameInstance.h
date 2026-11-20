@@ -28,6 +28,7 @@ public:
 	static bool isIdValid(int ID);
 	static Instance* getInstanceById(int ID);
 	static std::map<int, Instance*> world;
+	static std::set<int> activeWorld;
 	enum {
 		InstanceType_Undefined = 0,
 		InstanceType_Base,
@@ -57,6 +58,7 @@ public:
 		InstanceType_Audio,
 		InstanceType_Folder,
 		InstanceType_PointLight,
+		InstanceType_Spatial,
 		InstanceType_Count
 	};
 	static const std::string instanceTypeNames[InstanceType_Count];
@@ -76,6 +78,8 @@ public:
 	bool isEditorIntrinsic;
 	bool registered;
 	bool saveToFile;
+
+	bool isActive;
 	std::string name;
 	Instance* parent;
 	std::set<Instance*> children;
@@ -91,9 +95,16 @@ public:
 	virtual void update(float deltaTime, bool isStudio);
 	virtual int getChildIdFromType(int type);
 	virtual int getTypeTooltip();
+	virtual void makeActive();
+	virtual void makeInactive();
 	virtual std::string getEngineGUIHash();
 	void listChildren();
 	
+
+	//Am I the descendant of an inactive folder?
+	bool is(int type);
+	bool isInstanceDescendantOfInactiveFolder();	//Checks parents' 'omitFromSave()'
+	bool shouldWriteToFile();
 	virtual bool omitFromSave();
 	virtual bool omitFromHierarchyRender();
 	virtual int getNumSaveBytes();
@@ -108,5 +119,9 @@ void* offset(void* ptr, size_t offset);
 
 class Folder : public Instance {
 public:
+	bool storageFolder;
 	Folder();
+	virtual int getNumSaveBytes();
+	virtual int saveInstanceToFile(FILE* file); //Returns a pointer to the data representing this instance. The caller is responsible for freeing this memory.
+	virtual int loadInstanceFromFile(void* data, int offset = 0);
 };

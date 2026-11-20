@@ -82,7 +82,7 @@ sol::object LuaResource::InstanceToSolObj(sol::this_state ts, Instance* i) {
 	}
 }
 void LuaResource::InitializeLua() {
-	lua.open_libraries(sol::lib::base, sol::lib::math);
+	lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::table);
 
 	sol::table enumRoot = lua.create_named_table("Enum");
 	enumRoot.new_enum("KeyCode",
@@ -189,6 +189,10 @@ void LuaResource::InitializeLua() {
 		"Y", &vec3::Y,
 		"Z", &vec3::Z,
 
+		"Length", sol::property(&vec3::gmag),
+		"Unit", sol::property([](vec3 self) {
+			return self.smag(1.0f);
+		}),
 		sol::meta_function::addition, &vec3::operator+,
 		sol::meta_function::subtraction, sol::overload(
 			[](const vec3& a, const vec3& b) { return a - b; },
@@ -202,6 +206,7 @@ void LuaResource::InitializeLua() {
 	);
 
 	lua.new_usertype<vec2>("Vector2",
+
 		sol::constructors<vec2(), vec2(float, float)>(),
 
 		// Map the properties so Lua can read/write them
@@ -331,8 +336,15 @@ void LuaResource::InitializeLua() {
 		},
 		"Clone", [](Instance* self, sol::this_state ts) {
 			Instance* clone = self->clone();
+
 			return InstanceToSolObj(ts, clone);
+		},
+
+		"Destroy", [](Instance* self, sol::this_state ts) {
+			self->setParent(nullptr);
+			destroyQueue.insert(self);
 		}
+
 	);
 	
 	auto ResourceType = lua.new_usertype<Resource>(getInstanceNameFromType(InstanceType_Resource),
@@ -342,8 +354,18 @@ void LuaResource::InitializeLua() {
 	auto LuaResourceType = lua.new_usertype<LuaResource>(getInstanceNameFromType(InstanceType_LuaResource),
 		sol::base_classes, sol::bases<Resource, Instance>()
 	);
-	auto CameraType = lua.new_usertype<Camera>(getInstanceNameFromType(InstanceType_Camera),
+
+	auto SpatialInstanceType = lua.new_usertype<SpatialInstance>(getInstanceNameFromType(InstanceType_Spatial),
 		sol::base_classes, sol::bases<Instance>(),
+		"Position", &SpatialInstance::position,
+		"Rotation", &SpatialInstance::rotation,
+		"Scale", &SpatialInstance::scale,
+		"WorldPosition", sol::property(&SpatialInstance::getWorldPosition),
+		"WorldRotation", sol::property(&SpatialInstance::getWorldRotation),
+		"WorldScale", sol::property(&SpatialInstance::getWorldScale)
+	);
+	auto CameraType = lua.new_usertype<Camera>(getInstanceNameFromType(InstanceType_Camera),
+		sol::base_classes, sol::bases<SpatialInstance, Instance>(),
 		"new", sol::factories([](sol::this_state ts) {
 			return InstanceToSolObj(ts, new Camera());
 		},
@@ -351,8 +373,6 @@ void LuaResource::InitializeLua() {
 			return InstanceToSolObj(ts, new Camera(v));
 		}),
 		"FOV", &Camera::fov,
-		"Position", &Camera::position,
-		"Rotation", &Camera::rotation,
 		"MoveDirection2D", &Camera::moveDirection2D,
 		"LookMatrix", &Camera::look
 	);
@@ -375,7 +395,7 @@ void LuaResource::InitializeLua() {
 		})
 	);
 	auto MeshType = lua.new_usertype<Mesh>(getInstanceNameFromType(InstanceType_Mesh),
-		sol::base_classes, sol::bases<Instance>(),
+		sol::base_classes, sol::bases<SpatialInstance, Instance>(),
 		"new", sol::factories([](sol::this_state ts) {
 			return InstanceToSolObj(ts, new Mesh());
 		}),
@@ -402,7 +422,7 @@ void LuaResource::InitializeLua() {
 		)
 	);
 	auto TextGeometryType = lua.new_usertype<TextGeometry>(getInstanceNameFromType(InstanceType_TextGeometry),
-		sol::base_classes, sol::bases<Mesh, Instance>(),
+		sol::base_classes, sol::bases<Mesh, SpatialInstance, Instance>(),
 		"new", sol::factories([](sol::this_state ts) {
 			return InstanceToSolObj(ts, new TextGeometry());
 			}),
@@ -466,7 +486,7 @@ void LuaResource::InitializeLua() {
 		"LoadFromFile", &ImageResource::loadFromFile
 	);
 
-	auto ValueType = lua.new_usertype<Value>("ValueBase",
+	auto ValueType = lua.new_usertype<Value>(getInstanceNameFromType(InstanceType_Value),
 		sol::base_classes, sol::bases<Instance>()
 	);
 
@@ -562,18 +582,12 @@ void LuaResource::InitializeLua() {
 	);
 
 	auto Collision3DType = lua.new_usertype<Collision3D>(getInstanceNameFromType(InstanceType_Collision3D),
-		sol::base_classes, sol::bases<Instance>(),
+		sol::base_classes, sol::bases<SpatialInstance, Instance>(),
 		"new", sol::factories([](sol::this_state ts) {
 			return InstanceToSolObj(ts, new Collision3D());
 		}),
-		"Position", sol::property(
-			[](Collision3D* self, sol::this_state ts) {
-				return self->getPosition();
-			},
-			[](Collision3D* self, sol::this_state ts, vec3 pos) {
-				self->setPosition(pos);
-			}
-		),
+
+		//Atomically set individual axes of the position vector, updating the bounding box accordingly.
 		"SetX", [](Collision3D* self, sol::this_state ts, float x) {
 				vec3 pos = self->getPosition();
 				pos.X = x;
@@ -590,15 +604,6 @@ void LuaResource::InitializeLua() {
 				self->setPosition(pos);
 			},
 
-		"Size", sol::property(
-			[](Collision3D* self, sol::this_state ts) {
-				return self->getSize();
-			},
-			[](Collision3D* self, sol::this_state ts, vec3 size) {
-				self->setSize(size);
-			}
-		),
-
 		"Center", sol::property(
 			[](Collision3D* self, sol::this_state ts) {
 				return self->getCenter();
@@ -611,7 +616,9 @@ void LuaResource::InitializeLua() {
 
 		"IsInside", [](Collision3D* self, sol::this_state ts, vec3 point) {
 			return self->isInside(point);
-		}
+		},
+
+		"UpdateBoundingBox", &Collision3D::updateBoundingBox
 	);
 
 	auto ProceduralGeometryType = lua.new_usertype<ProceduralGeometry>(getInstanceNameFromType(InstanceType_ProceduralGeometry),
@@ -646,7 +653,7 @@ void LuaResource::InitializeLua() {
 		"IsDrawElements", &ProceduralGeometry::drawElements
 		);
 	auto AudioType = lua.new_usertype<Audio>(getInstanceNameFromType(InstanceType_Audio),
-		sol::base_classes, sol::bases<Instance>(),
+		sol::base_classes, sol::bases<SpatialInstance, Instance>(),
 		"new", sol::factories([](sol::this_state ts) {
 			return InstanceToSolObj(ts, new Audio());
 		}),
@@ -661,40 +668,13 @@ void LuaResource::InitializeLua() {
 	);
 
 	auto PointLightType = lua.new_usertype<Light>(getInstanceNameFromType(InstanceType_PointLight),
-		sol::base_classes, sol::bases<Instance>(),
+		sol::base_classes, sol::bases<SpatialInstance, Instance>(),
 		"new", sol::factories([](sol::this_state ts) {
 			return InstanceToSolObj(ts, new Light());
 		}),	
-		"Position", sol::property(
-			&Light::setPosition,
-
-			[](Light* self, sol::this_state ts) {
-				vec3 vector;
-				vector.X = self->getLightData()->position.X;
-				vector.Y = self->getLightData()->position.Y;
-				vector.Z = self->getLightData()->position.Z;
-				return vector;
-			}
-		),
 		//TODO: expose Stream class and add JSON class
-		"Color", sol::property(
-			&Light::setColor,
-
-			[](Light* self, sol::this_state ts) {
-				vec3 vector;
-				vector.X = self->getLightData()->color.X;
-				vector.Y = self->getLightData()->color.Y;
-				vector.Z = self->getLightData()->color.Z;
-				return vector;
-			}
-		),
-		"Intensity", sol::property(
-			&Light::setIntensity,
-
-			[](Light* self, sol::this_state ts) {
-				return self->getLightData()->color.W;
-			}
-		)
+		"Color", &Light::color,
+		"Intensity", &Light::intensity
 	);
 
 	//This freaking blows, but it works i guess
@@ -742,6 +722,7 @@ sol::object LuaResource::__luaIndex(Instance* self, sol::this_state ts, const st
 	}
 	//if all else fails , return nil
 
+	printf("LuaRuntimeError: Could not find key '%s'\n", key.c_str());
 	return sol::make_object(ts, sol::nil);
 }
 void LuaResource::loadFromFile(std::string filepath) {
@@ -863,7 +844,7 @@ int LuaResource::loadInstanceFromFile(void* data, int off) {
 	debug_log("Loaded script source: %s\n", source);
 
 	//Auto-load from file if there is a filepath && we are in the editor
-	if (filePath.length() > 0 && Scene::isStudio) {
+	if (filePath.length() > 0) {
 		loadFromFile(filePath);
 	}
 

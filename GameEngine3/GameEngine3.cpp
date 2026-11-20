@@ -49,10 +49,6 @@ int main() {
 	Folder* resources = new Folder();
 	resources->name = "Resources";
 	resources->setParent(scene);
-	ShaderProgram* core_shader = new ShaderProgram("core://shader/core_vertex.glsl", "core://shader/core_fragment.glsl");
-	core_shader->createProgram();
-	core_shader->setParent(resources);
-	core_shader->name = "MainShader";
 	LuaResource* script = new LuaResource("core://scripts/editor_camera_controls.lua");
 	script->isEditorIntrinsic = true;
 	script->loadScript();
@@ -66,6 +62,11 @@ int main() {
 	scene->renderShader = pp_shader->getId();
 #endif
 
+	ShaderProgram* core_shader = new ShaderProgram("core://shader/core_vertex.glsl", "core://shader/core_fragment.glsl");
+	core_shader->createProgram();
+	core_shader->name = "MainShader";
+	core_shader->isEditorIntrinsic = true;
+	Scene::coreShader = core_shader->getId();
 	
 	ProceduralGeometry* shaderQuadGeom = new ProceduralGeometry();
 	shaderQuadGeom->name = "RenderQuadGeom";
@@ -113,6 +114,57 @@ int main() {
 	This will allow for consistent references to these resources across scenes and saves. */
 
 
+	Material* GizmoMaterialX = new Material();
+	GizmoMaterialX->setShader(nullptr);
+	GizmoMaterialX->diffuseColor = vec4(1, 0, 0, 0.5);
+	GizmoMaterialX->isEditorIntrinsic = true;
+
+	Material* GizmoMaterialY = new Material();
+	GizmoMaterialY->setShader(nullptr);
+	GizmoMaterialY->diffuseColor = vec4(0, 1, 0, 0.5);
+	GizmoMaterialY->isEditorIntrinsic = true;
+
+	Material* GizmoMaterialZ = new Material();
+	GizmoMaterialZ->setShader(nullptr);
+	GizmoMaterialZ->diffuseColor = vec4(0, 0, 1, 0.5);
+	GizmoMaterialZ->isEditorIntrinsic = true;
+	Geometry* cubeGeom = new Geometry();
+	cubeGeom->isEditorIntrinsic = true;
+	cubeGeom->name = "CubeGeom";
+	cubeGeom->loadFromFile("res://models/Cube.fbx");
+
+	Mesh* positionGizmoMesh = new Mesh();
+	positionGizmoMesh->isEditorIntrinsic = true;
+
+	Mesh* gizmoMeshTX = new Mesh();
+	gizmoMeshTX->isEditorIntrinsic = true;
+	gizmoMeshTX->name = "MeshTranslateX";
+	gizmoMeshTX->setParent(positionGizmoMesh);
+	gizmoMeshTX->position = vec3(5, 0, 0);
+	gizmoMeshTX->scale = vec3(3.0, 0.3, 0.3);
+	gizmoMeshTX->material = GizmoMaterialX->getId();
+	gizmoMeshTX->geometry = cubeGeom->getId();
+	Scene::translateInstance[eAxis_X - 1] = gizmoMeshTX->getId();
+
+	Mesh* gizmoMeshTY = new Mesh();
+	gizmoMeshTY->isEditorIntrinsic = true;
+	gizmoMeshTY->name = "MeshTranslateY";
+	gizmoMeshTY->setParent(positionGizmoMesh);
+	gizmoMeshTY->position = vec3(0, 5, 0);
+	gizmoMeshTY->scale = vec3(0.3, 3.0, 0.3);
+	gizmoMeshTY->material = GizmoMaterialY->getId();
+	gizmoMeshTY->geometry = cubeGeom->getId();
+	Scene::translateInstance[eAxis_Y - 1] = gizmoMeshTY->getId();
+
+	Mesh* gizmoMeshTZ = new Mesh();
+	gizmoMeshTZ->isEditorIntrinsic = true;
+	gizmoMeshTZ->name = "MeshTranslateZ";
+	gizmoMeshTZ->setParent(positionGizmoMesh);
+	gizmoMeshTZ->position = vec3(0, 0, 5);
+	gizmoMeshTZ->scale = vec3(0.3, 0.3, 3.0);
+	gizmoMeshTZ->material = GizmoMaterialZ->getId();
+	gizmoMeshTZ->geometry = cubeGeom->getId();
+	Scene::translateInstance[eAxis_Z - 1] = gizmoMeshTZ->getId();
 
 	ImageResource* diffuse_FBOPortRender = new ImageResource(eMaterialTexture_Diffuse);
 	diffuse_FBOPortRender->name = "DiffuseLocation";
@@ -179,12 +231,8 @@ int main() {
 	renderQuad->geometry = shaderQuadGeom->getId();
 	renderQuad->material = renderQuadMaterial->getId();
 	renderQuad->renderLayer = eRenderLayer_UI;
-
+	renderQuad->isFramebuffer = true;
 	glfwSetFramebufferSizeCallback(graphics->window, &graphics->resizeFramebufferCallback);
-
-	Light* light = new Light();
-	light->name = "LightMain";
-	light->setParent(scene);
 	Light::bindLightsToRender();
 
 
@@ -255,9 +303,24 @@ int main() {
 		EngineGUI::DrawAddInstanceModalNode();
 #endif
 		ImGui::Render(); 
+
+
 		for (auto i : Instance::world) {
 			if (i.second) {
-				i.second->update(graphics->deltaTime, Scene::isStudio);
+				bool active = !i.second->isInstanceDescendantOfInactiveFolder();
+				//i.second->update(graphics->deltaTime, Scene::isStudio);
+
+				if (active) {
+					i.second->makeActive();
+				} else {
+					i.second->makeInactive();
+				}
+			}
+		}
+
+		for (int i : Instance::activeWorld) {
+			if (Instance::getInstanceById(i)) {
+				Instance::getInstanceById(i)->update(graphics->deltaTime, Scene::isStudio);
 			}
 		}
 
@@ -281,7 +344,10 @@ int main() {
 		Render quad again to FBO 0 with post-processing pass
 
 		*/
+		EngineGUI::calculateMouseRayDirection();
+		//printf("%s\n", std::string(EngineGUI::mouseRayDirection).c_str());
 
+		Scene::getCurrentScene()->getCamera()->updateMatrices();
 		glBindVertexArray(0);
 		graphics->getFramebuffer(eFramebuffer_Lighting)->bind();
 		glEnable(GL_STENCIL_TEST);
@@ -301,7 +367,7 @@ int main() {
 		glStencilMask(0x00);
 		glStencilFunc(GL_EQUAL, 1, 0xFF);
 		glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-		renderQuad->render(Scene::getCurrentScene()->getCamera(), false, eRenderLayer_UI);
+		renderQuad->render(Scene::getCurrentCamera(), false, eRenderLayer_UI);
 		glStencilMask(0xFF);
 		glDisable(GL_STENCIL_TEST);
 		graphics->getFramebuffer(eFramebuffer_Lighting)->unbind();
@@ -309,10 +375,11 @@ int main() {
 		Scene::getCurrentScene()->RenderScene(1);
 		graphics->getFramebuffer(eFramebuffer_PostProcess)->unbind();
 		renderQuad->material = ppQuadMaterial->getId();
-		renderQuad->render(Scene::getCurrentScene()->getCamera(), false, eRenderLayer_UI);
+		renderQuad->render(Scene::getCurrentCamera(), false, eRenderLayer_UI);
 		Scene::getCurrentScene()->RenderScene(2);
+		EngineGUI::DrawTranslateGizmo();
+		EngineGUI::updateGizmoObject();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
 		graphics->windowUpdate();
 	}
 

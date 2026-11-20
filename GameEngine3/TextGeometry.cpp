@@ -253,10 +253,8 @@ void TextGeometry::render(Camera* camera, bool transparent, int renderLayerTarge
     Font* f = &fontCharacterMaps[font];
 	//printf("VAO for ID: %d: %d\n", geometry, g->vao);
 	setupRenderSettings(transparent, cull);
-	calcTransform();
-	m->applyMaterial();
-	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], transform, GL_TRUE, 4);
-	program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->position);
+	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], getWorldTransform(), GL_TRUE, 4);
+	program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->getWorldPosition());
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraLookMatrix], camera->look, GL_TRUE, 3);
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraProjectionMatrix], camera->projection, GL_TRUE, 4);
 	program->setUniform1f(program->shaderUniformNames[eSUniform_CurrentTime], Graphics::getInstance()->lastFrameTime);

@@ -9,6 +9,7 @@ const GLenum ShaderResource::shaderTypeEnums[] = {
 	GL_FRAGMENT_SHADER
 };
 ShaderResource::ShaderResource() : Resource() {
+	printf("New Shader Instance\n");
 	name = "Shader";
 	type = InstanceType_ShaderResource;
 	id = 0;
@@ -147,9 +148,14 @@ int ShaderProgram::linkProgram() {
 		return -1;
 	}
 
-	GLuint lightBlockIndex = glGetUniformBlockIndex(this->id, "LightData");
+	GLuint lightBlockIndex = glGetUniformBlockIndex(this->id, "PointLightData");
     if (lightBlockIndex != GL_INVALID_INDEX) {
         glUniformBlockBinding(this->id, lightBlockIndex, 1);
+    }
+
+	lightBlockIndex = glGetUniformBlockIndex(this->id, "DirectionalLightData");
+    if (lightBlockIndex != GL_INVALID_INDEX) {
+        glUniformBlockBinding(this->id, lightBlockIndex, 2);
     }
 
 	return 0;
@@ -168,7 +174,7 @@ int ShaderProgram::createProgram(bool reloadShaders) {
 	for (Instance* child : children) {
 		if (child->type != InstanceType_ShaderResource) {
 			continue;
-		}
+		}	
 		shaders.push_back(dynamic_cast<ShaderResource*>(child));
 	}
 

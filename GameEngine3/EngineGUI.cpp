@@ -7,6 +7,8 @@
 #include "TextGeometry.h"
 #include "SoundInstance.h"
 #include "Light.h"
+#include "Value.h"
+int EngineGUI::axisSelected = -1;
 int EngineGUI::selectedInstanceId = -1;
 std::string EngineGUI::selectedInstanceHash = "";
 
@@ -20,8 +22,16 @@ int EngineGUI::currentSamplesAudioPlayback = 0;
 int EngineGUI::maxSamplesAudioPlayback = 0;
 int EngineGUI::currentSelectionDropdown = 0;
 int EngineGUI::currentSelectionDropdown2 = 0;
+
+vec3 EngineGUI::mouseRayDirection;
+vec3 EngineGUI::originalObjectTransform;
+vec3 EngineGUI::originalObjectAxis;
+vec3 EngineGUI::newTransform;
+float EngineGUI::gizmoAxisOffset;
+float EngineGUI::gizmoSnapPhysical = 1;
 pugi::xml_document EngineGUI::tooltipsXML;
 bool EngineGUI::wasXMLSuccessful = false;
+bool EngineGUI::isGizmoActive = false;
 const int EngineGUI::EDITOR_ADD_INSTANCE[] = {
 	Instance::InstanceType_Camera,
 	Instance::InstanceType_Mesh,
@@ -219,7 +229,7 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 		}
 		ImGui::InputFloat3("Position", (float*)&mesh->position);
 		renderTooltipForItem(IDS_IATTR_POSITION);
-		ImGui::InputFloat3("Rotation", (float*)&mesh->rotation);
+		DrawRotationFloat3(&mesh->rotation);
 		renderTooltipForItem(IDS_IATTR_ROTATION);
 		ImGui::InputFloat3("Scale", (float*)&mesh->scale);
 		renderTooltipForItem(IDS_IATTR_SCALE);
@@ -277,7 +287,7 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 		Camera* m = (Camera*)inst;
 		ImGui::InputFloat3("Position", (float*)&m->position);
 		renderTooltipForItem(IDS_IATTR_POSITION);
-		ImGui::InputFloat3("Rotation", (float*)&m->rotation);
+		DrawRotationFloat3(&m->rotation);
 		renderTooltipForItem(IDS_IATTR_ROTATION);
 		ImGui::Checkbox("Orthographic", &m->isOrthographic);
 		ImGui::SliderFloat("Field Of View", &m->fov, 0.0f, 180.0f, "FOV: %.3f deg");
@@ -306,19 +316,29 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 
 		ImGui::ColorEdit3("Ambient Light", (float*)&Light::ambient);
 		ImGui::ColorEdit4("Background Color", (float*)&Graphics::backgroundColor);
+		if (ImGui::InputFloat("Move Snap", (float*)&gizmoSnapPhysical)) {
+			if (gizmoSnapPhysical < 0.0f) {
+				gizmoSnapPhysical = 0.0f;
+			}
+		}
 	}
 	if (inst->type == Instance::InstanceType_Collision3D) {
 		Collision3D* m = (Collision3D*)inst;
-		vec3 position = m->getPosition();
-		vec3 size = m->getSize();
+		vec3 position = m->position;
+		vec3 size = m->scale;
 		if (ImGui::InputFloat3("Position", (float*)&position)) {
 			m->setPosition(position);
 		};
+		DrawRotationFloat3(&m->rotation);
 		renderTooltipForItem(IDS_IATTR_POSITION);
 		if (ImGui::InputFloat3("Size", (float*)&size)) {
 			m->setSize(size);
 		};
 		renderTooltipForItem(IDS_IATTR_ROTATION);
+
+
+		ImGui::Checkbox("Preserve Dimensions", &(m->preserveRotatedSize));
+		ImGui::Checkbox("Represent Parent", &(m->wrapAroundParentMesh));
 	}
 	if (inst->type == Instance::InstanceType_Material) {
 		Material* m = (Material*)inst;
@@ -379,10 +399,19 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 	if (inst->type == Instance::InstanceType_PointLight) {
 		Light* m = (Light*)inst;
 
-		ImGui::InputFloat3("Position", (float*)&m->getLightData()->position);
-		ImGui::ColorEdit3("Color", (float*)&m->getLightData()->color);
+		ImGui::InputFloat3("Position", (float*)&m->position);
+		ImGui::ColorEdit3("Color", (float*)&m->color);
 		renderTooltipForItem(IDS_IATTR_POSITION);
-		ImGui::InputFloat("Intensity", (float*)&m->getLightData()->color.W);
+		ImGui::InputFloat("Intensity", (float*)&m->intensity);
+		DrawRotationFloat3(&m->rotation);
+
+		float range = m->rangeAngle * (180.0f / PI);
+		if (ImGui::SliderFloat("Range", &range, 0, 90, "%.1f degrees")) {
+			m->rangeAngle = range * (PI / 180.0f);
+		};
+
+		ImGui::Checkbox("Directional", &m->isDirectional);
+		ImGui::Checkbox("Sun", &m->isSunLight);
 	}
 	if (Instance::isInstanceOf(inst->type, Instance::InstanceType_Resource)) {
 		Resource* m = (Resource*)inst;
@@ -453,7 +482,16 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 			}
 			return;
 	}
-
+	if (inst->type == Instance::InstanceType_Folder) {
+		Folder* m = (Folder*)inst;
+		ImGui::Checkbox("Storage Folder", &m->storageFolder);
+		return;
+	}
+	if (inst->type == Instance::InstanceType_BooleanValue) {
+		BooleanValue* m = (BooleanValue*)inst;
+		ImGui::Checkbox("Value", &m->value);
+		return;
+	}
 	if (inst->type == Instance::InstanceType_UIRootNode) {
 		UIRootNode* m = (UIRootNode*)inst;
 
@@ -678,5 +716,212 @@ bool EngineGUI::isEyeDropperValidAndOfType(int type) {
 		return Instance::isInstanceOf(i->type, type) || type == -1;
 	} else {
 		return false;
+	}
+}
+
+void EngineGUI::DrawRotationFloat3(vec3* edit) {
+	vec3 degrees = *edit * (180 / PI);
+	
+	if (ImGui::InputFloat3("Rotation", (float*)&degrees)) {
+		*edit = degrees * (PI / 180);
+	}
+}
+
+void EngineGUI::calculateMouseRayDirection() {
+MouseData md = Graphics::getInstance()->mouse_data;
+vec2 mouseNDC = vec2(md.screenNormalized.X, -md.screenNormalized.Y);
+
+// 1. Unproject from Clip Space to Eye (Camera) Space
+vec4 clipCoords = vec4(mouseNDC.X, mouseNDC.Y, -1.0f, 1.0f);
+Camera* cam = Scene::getCurrentCamera();
+vec4 eyeCoords = cam->projection.inverse() * clipCoords;
+
+// Perform perspective divide so X, Y, and Z share the exact same scale
+if (eyeCoords.W != 0.0f) {
+	eyeCoords.X /= eyeCoords.W;
+	eyeCoords.Y /= eyeCoords.W;
+	eyeCoords.Z /= eyeCoords.W;
+}
+eyeCoords.W = 0.0f; // Treat as a direction vector (ignore camera translation)
+
+// 2. Transform from Camera Space to World Space (NO .inverse() here!)
+vec4 worldDirVec4 = cam->getWorldTransform() * eyeCoords;
+mouseRayDirection = vec3(worldDirVec4.X, worldDirVec4.Y, worldDirVec4.Z).smag(1.0f);
+
+
+}
+
+void EngineGUI::DrawTranslateGizmo() {
+
+
+	if (!Scene::isStudio) return;
+	//many many many sanity checks
+	if (selectedInstanceId == -1) return;
+	SpatialInstance* si = (SpatialInstance*)Instance::getInstanceById(selectedInstanceId);
+	if (!si) return;
+	if (!Instance::isInstanceOf(si->type, Instance::InstanceType_Spatial)) return;
+
+	Mesh* tx = (Mesh*)Instance::getInstanceById(Scene::translateInstance[eAxis_X - 1]);
+	if (!tx) return;
+	if (!Instance::isInstanceOf(tx->type, Instance::InstanceType_Mesh)) return;
+
+	Mesh* ty = (Mesh*)Instance::getInstanceById(Scene::translateInstance[eAxis_Y - 1]);
+	if (!ty) return;
+	if (!Instance::isInstanceOf(ty->type, Instance::InstanceType_Mesh)) return;
+
+	Mesh* tz = (Mesh*)Instance::getInstanceById(Scene::translateInstance[eAxis_Z - 1]);
+	if (!tz) return;
+	if (!Instance::isInstanceOf(tz->type, Instance::InstanceType_Mesh)) return;
+	
+	Mesh* gizmoAnchor = (Mesh*)tz->parent;
+	if (!gizmoAnchor) return;
+
+	gizmoAnchor->position = si->getWorldPosition();
+
+	gizmoAnchor->scale = vec3(1.0f, 1.0f, 1.0f) * (si->getWorldPosition() - Scene::getCurrentCamera()->position).gmag() * 0.05f;
+	
+	gizmoAnchor->rotation = si->getWorldRotation();
+	glEnable(GL_STENCIL_TEST);
+	glClearStencil(100);
+	glStencilMask(0xFF);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
+	if (!isGizmoActive || axisSelected == eAxis_X) {
+		glStencilFunc(GL_ALWAYS, eAxis_X + 10, 0xFF);
+		tx->render(Scene::getCurrentCamera(), true);
+	}
+	if (!isGizmoActive || axisSelected == 2) {
+		glStencilFunc(GL_ALWAYS, eAxis_Y + 10, 0xFF);
+		ty->render(Scene::getCurrentCamera(), true);
+	}
+	if (!isGizmoActive || axisSelected == 3) {
+		glStencilFunc(GL_ALWAYS, eAxis_Z + 10, 0xFF);
+		tz->render(Scene::getCurrentCamera(), true);
+	}
+	MouseData md = Graphics::getInstance()->mouse_data;
+
+	//Coordinates should be from 0 - windowWidth and 0 - windowHeight, with (0,0) being the bottom left corner of the window
+	int glMouseX = (int)((md.screenNormalized.X + 1) * 0.5 * Graphics::getInstance()->windowWidth);
+	int glMouseY = (int)((1 - ((md.screenNormalized.Y + 1) * 0.5)) * Graphics::getInstance()->windowHeight);
+	GLubyte hoveredID = 0;
+
+
+	glReadPixels(glMouseX, glMouseY, 1, 1, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, &hoveredID);
+
+	if (!isGizmoActive) {
+		axisSelected = hoveredID - 10;
+	}
+	//Works
+	glStencilMask(0xFF);
+	glDisable(GL_STENCIL_TEST);
+}
+
+void EngineGUI::setAxisMovementMode(bool isMoving) {
+
+	printf("Moving %d, %d\n", isMoving, axisSelected);
+	if (isMoving) {
+		if (selectedInstanceId == -1) return;
+		SpatialInstance* si = (SpatialInstance*)Instance::getInstanceById(selectedInstanceId);
+		if (!si) return;
+		if (!Instance::isInstanceOf(si->type, Instance::InstanceType_Spatial)) return;
+
+		isGizmoActive = true;
+		originalObjectTransform = si->getWorldPosition();
+
+		if (axisSelected != eAxis_X && axisSelected != eAxis_Y && axisSelected != eAxis_Z) {
+			isGizmoActive = false;
+			return;
+		}
+		originalObjectAxis = vec3::axis(axisSelected);
+
+
+		gizmoAxisOffset = getMoveDistanceAlongAxis();
+		printf("AxisAAA: %f\n", gizmoAxisOffset);
+	}
+	else {
+		axisSelected = 0;
+		isGizmoActive = false;
+	}
+}
+
+float EngineGUI::getMoveDistanceAlongAxis() {
+	if (!isGizmoActive) return 0;
+
+	SpatialInstance* si =
+		dynamic_cast<SpatialInstance*>(Instance::getInstanceById(selectedInstanceId));
+
+	if (!si) return 0;
+
+	Mesh* tx = (Mesh*)Instance::getInstanceById(Scene::translateInstance[0]);
+	if (!tx || !Instance::isInstanceOf(tx->type, Instance::InstanceType_Mesh)) return 0;
+
+	Mesh* gizmoAnchor = (Mesh*)tx->parent;
+	if (!gizmoAnchor) return 0;
+
+	Camera* cam = Scene::getCurrentCamera();
+	if (!cam) return 0;
+
+	vec3 cameraPosition = cam->getWorldPosition();
+	vec3 gizmoPosition = originalObjectTransform;
+
+	// Transform the selected object's local X axis into world space.
+	vec4 worldAxis = si->getWorldTransform() * vec4(originalObjectAxis.X, originalObjectAxis.Y, originalObjectAxis.Z, 0.0f);
+
+	vec3 axis = vec3(worldAxis.X, worldAxis.Y, worldAxis.Z).smag(1.0f);
+
+	vec3 cameraToGizmo = (gizmoPosition - cameraPosition).smag(1.0f);
+
+	vec3 planeNormal = (axis.cross(cameraToGizmo.cross(axis))).smag(1.0f);
+
+	float denominator = mouseRayDirection.dot(planeNormal);
+	if (fabs(denominator) < 0.0001f) return 0;
+
+	float t = ((gizmoPosition - cameraPosition).dot(planeNormal)) / denominator;
+
+	vec3 mousePosition = cameraPosition + mouseRayDirection * t;
+
+	float axisDistance = (mousePosition - gizmoPosition).dot(axis);
+	
+	return axisDistance;
+}
+
+void EngineGUI::updateGizmoObject() {
+
+
+	if (!isGizmoActive) return;
+	vec3 gizmoPosition = originalObjectTransform;
+	SpatialInstance* si = (SpatialInstance*)(Instance::getInstanceById(selectedInstanceId));
+	if (!si) return;
+
+	vec4 worldAxis = si->getWorldTransform() * vec4(originalObjectAxis.X, originalObjectAxis.Y, originalObjectAxis.Z, 0.0f);
+	vec3 axis = vec3(worldAxis.X, worldAxis.Y, worldAxis.Z).smag(1.0f);
+	
+	float axisDistance = getMoveDistanceAlongAxis() - gizmoAxisOffset;
+
+	if (gizmoSnapPhysical > 0.0f) {
+		axisDistance = roundf(axisDistance / gizmoSnapPhysical) * gizmoSnapPhysical;
+	}
+	const vec3 newWorldPosition = gizmoPosition + axis * axisDistance;
+
+	SpatialInstance* parentSpatial = si->getNextSpatialParent();
+	if (parentSpatial) {
+		const mat4 inverseParentTransform =
+			parentSpatial->getWorldTransform().inverse();
+
+
+
+		const vec4 localPosition =
+			inverseParentTransform *
+			vec4(newWorldPosition.X, newWorldPosition.Y, newWorldPosition.Z, 1.0f);
+
+		si->position = vec3(
+			localPosition.X,
+			localPosition.Y,
+			localPosition.Z
+		);
+	}
+	else {
+		si->position = newWorldPosition;
+
 	}
 }

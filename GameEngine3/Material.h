@@ -37,6 +37,8 @@ public:
 	void applyMaterialFramebuffer();
 
 	int getShaderInstanceId();
+
+	ShaderProgram* getShader();
 	int getTextureInstanceId(int target);
 	virtual Instance* clone_this();
 

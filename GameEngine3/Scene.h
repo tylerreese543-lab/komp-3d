@@ -10,7 +10,10 @@ class Scene : public Instance
 	static bool LoadGameFileHeader(FILE* file, int* numInstances);
 
 public:
+
+	static int translateInstance[3];
 	static int debugShader;
+	static int coreShader;
 	static const bool isStudio;
 	int currentCamera;
 	//The ID of the camera to load into currentCamera when this is loaded at runtime;
@@ -28,6 +31,7 @@ public:
 	static Camera* getCurrentCamera();
 	void PreRender();
 	void RenderScene(int passNum);
+	virtual bool omitFromSave();
 
 	virtual int saveInstanceToFile(FILE* file);
 	virtual int loadInstanceFromFile(void* data, int offset = 0);

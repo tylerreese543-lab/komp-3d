@@ -63,3 +63,9 @@ enum {
 	eFramebuffer_Lighting = 1,
 	eFramebuffer_PostProcess = 2
 };
+
+enum {
+	eAxis_X = 1,
+	eAxis_Y = 2,
+	eAxis_Z = 3
+};

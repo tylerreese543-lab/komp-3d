@@ -1,6 +1,7 @@
+
 #include "Mesh.h"
 #include "Light.h"
-std::set<Mesh*> Mesh::render_objects;
+std::set<int> Mesh::render_objects;
 vec3 Mesh::cameraPosition;
 
 
@@ -123,10 +124,7 @@ void ProceduralGeometry::clearBuffers() {
 	ebo.data = nullptr;
 	ebo.size = 0;
 }
-Mesh::Mesh() : Instance() {
-	setPosition(vec3(0, 0, 0));
-	setRotation(vec3(0, 0, 0));
-	setScale(vec3(1));
+Mesh::Mesh() : SpatialInstance() {
 	
 	type = InstanceType_Mesh;
 	name = "Mesh";
@@ -135,9 +133,10 @@ Mesh::Mesh() : Instance() {
 	visible = true;
 
 	VAODirty = true;
-	render_objects.insert(this);
+	render_objects.insert(getId());
 
 	cull = true;
+	isFramebuffer = false;
 
 	renderLayer = eRenderLayer_World;
 }
@@ -154,12 +153,11 @@ void Mesh::setScale(vec3 scl) {
 	scale = scl;
 }
 
-void Mesh::calcTransform() {
-	transform = mat4::transform(position, scale, rotation);
-}
 
 void Mesh::render(Camera* camera, bool transparent, int renderLayerTarget) {
 	
+
+	if (!isActive) return;
 	if (renderLayer != renderLayerTarget) return;
 	if (!visible) return;
 	if (!isIdValid(geometry)) {
@@ -191,7 +189,7 @@ void Mesh::render(Camera* camera, bool transparent, int renderLayerTarget) {
 		VAODirty = false;
 	}
 	
-	if (isEditorIntrinsic) {
+	if (isFramebuffer) {
 		setupRenderSettings(false, false);
 		//Do not write me do depth if I am the render quad!
 		glDepthMask(GL_FALSE);
@@ -200,12 +198,12 @@ void Mesh::render(Camera* camera, bool transparent, int renderLayerTarget) {
 	else {
 		setupRenderSettings(transparent, cull);
 	}
-	calcTransform();
 	program->setUniform3f("l_AmbientLight", Light::ambient);
-	program->setUniform1i("l_NumLights", Light::numLights);
-	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], transform, GL_TRUE, 4);
+	program->setUniform1i("l_NumPointLights", Light::numPointLights);
+	program->setUniform1i("l_NumDirectionalLights", Light::numDirectionalLights);
+	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], getWorldTransform(), GL_TRUE, 4);
 	if (!isEditorIntrinsic || camera) {
-		program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->position);
+		program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->getWorldPosition());
 		program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraLookMatrix], camera->look, GL_TRUE, 3);
 		program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraProjectionMatrix], camera->projection, GL_TRUE, 4);
 	}
@@ -242,6 +240,10 @@ void Geometry::loadFromFile(std::string filepath, int meshID, int ImporterFlags)
 	int sizeColor = mesh->mNumVertices * 3;
 	int sizeIndices = mesh->mNumFaces * 3;
 
+
+	aiAABB boundingBox = mesh->mAABB;
+	boundingBoxMin = vec3(boundingBox.mMin.x, boundingBox.mMin.y, boundingBox.mMin.z);
+	boundingBoxMax = vec3(boundingBox.mMax.x, boundingBox.mMax.y, boundingBox.mMax.z);
 	clearBuffers();
 	//TODO: add interleaved load capabilties
 	if (mesh->HasPositions()) {
@@ -340,9 +342,11 @@ void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 	std::vector<Mesh*> transparent_objects; // To be sorted by distance
 	std::set<Mesh*> ui_objects;
 	std::set<Mesh*>unlit_objects;
-	for (Mesh* m : render_objects) {
+	for (int id : render_objects) {
 		//debug_log("Rendering mesh '%s' (ID: %d) with geometry ID: %d and material ID: %d\n", m->name.c_str(), m->instanceId, m->geometry, m->material);
-
+		Mesh* m = (Mesh*)getInstanceById(id);
+		if (!m) continue;
+		if (!isInstanceOf(m->type, InstanceType_Mesh)) continue;
 		Material* material = (Material*)getInstanceById(m->material);
 		if (material && !m->isEditorIntrinsic) {
 			bool materialTransparent = material->isTransparent || material->diffuseColor.W < 0.99f;
@@ -402,26 +406,21 @@ int Geometry::getNumSaveBytes() {
 }
 
 int Mesh::getNumSaveBytes() {
-	return Instance::getNumSaveBytes() + (sizeof(vec3) * 3) + (3 * sizeof(int)) + (2 * sizeof(bool));
+	return SpatialInstance::getNumSaveBytes() + (3 * sizeof(int)) + (2 * sizeof(bool));
 }
 
 int Mesh::destroy() {
-	render_objects.erase(this);
 	return Instance::destroy();
 }
 
 Instance* Mesh::clone_this() {
-	Mesh* i = new Mesh(*this);
-	render_objects.insert(i);
-	return registerInstance(i, true);
+	Mesh* i = (Mesh*)registerInstance(new Mesh(*this), true);
+	return i;
 }
 
 int Mesh::saveInstanceToFile(FILE* file) {
 	int offset = 0;
-	offset += Instance::saveInstanceToFile(file);
-	offset += fwrite(&position, sizeof(vec3), 1, file);
-	offset += fwrite(&rotation, sizeof(vec3), 1, file);
-	offset += fwrite(&scale, sizeof(vec3), 1, file);
+	offset += SpatialInstance::saveInstanceToFile(file);
 	offset += fwrite(&geometry, sizeof(int), 1, file);
 	offset += fwrite(&material, sizeof(int), 1, file);
 	offset += fwrite(&visible, sizeof(bool), 1, file);
@@ -433,13 +432,7 @@ int Mesh::saveInstanceToFile(FILE* file) {
 int Mesh::loadInstanceFromFile(void* data, int off) {
 
 	int o = off;
-	o += Instance::loadInstanceFromFile(data, o);
-	position = *(vec3*)offset(data, o);
-	o += sizeof(vec3);
-	rotation = *(vec3*)offset(data, o);
-	o += sizeof(vec3);
-	scale = *(vec3*)offset(data, o);
-	o += sizeof(vec3);
+	o += SpatialInstance::loadInstanceFromFile(data, o);
 	geometry = *(int*)offset(data, o);
 	o += sizeof(int);
 	material = *(int*)offset(data, o);
@@ -456,7 +449,7 @@ int Mesh::loadInstanceFromFile(void* data, int off) {
 
 void Mesh::finalizeLoad(inst_conv_map* conversionMap) {
 
-	Instance::finalizeLoad(conversionMap);
+	SpatialInstance::finalizeLoad(conversionMap);
 	debug_log("Finalizing load of Mesh '%s' (ID: %d) with geometry ID: %d, material ID: %d\n", name.c_str(), instanceId, geometry, material);
 	if (conversionMap->find(geometry) != conversionMap->end()) {
 		geometry = conversionMap->at(geometry);
@@ -684,6 +677,7 @@ void Geometry::updateBuffers() {
 	for (int i = 0; i < eVBO_MAX; ++i) {
 		vbos[i].update();
 	}
+	ebo.update();
 }
 Instance* ProceduralGeometry::clone_this() {
 	ProceduralGeometry* g = (ProceduralGeometry*)registerInstance(new ProceduralGeometry(*this), true);
@@ -799,7 +793,7 @@ void Mesh::setupRenderSettings(bool transparent, bool backfaceCulling) {
 		glDepthMask(GL_TRUE);
 	}
 
-	if (renderLayer == eRenderLayer_UI) {
+	if (renderLayer == eRenderLayer_UI || isEditorIntrinsic) {
 		glDisable(GL_DEPTH_TEST);
 		glDepthMask(GL_FALSE);
 		glDisable(GL_CULL_FACE);
@@ -823,7 +817,7 @@ int Mesh::prepareMaterial(ShaderProgram** shaderOut) {
 	}
 	else if (isInstanceOf(m->type, InstanceType_Material)) {
 		Material* mat = (Material*)m;
-		program = (ShaderProgram*)getInstanceById(mat->getShaderInstanceId());
+		program = mat->getShader();
 		mat->applyMaterial();
 	}
 
@@ -832,4 +826,15 @@ int Mesh::prepareMaterial(ShaderProgram** shaderOut) {
 		return -1;
 	}
 	return 0;
+}
+
+
+void Mesh::makeActive() {
+	render_objects.insert(getId());
+	SpatialInstance::makeActive();
+}
+
+void Mesh::makeInactive() {
+	render_objects.erase(getId());
+	SpatialInstance::makeInactive();
 }

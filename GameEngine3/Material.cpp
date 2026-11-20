@@ -1,6 +1,6 @@
 #include "Material.h"
 
-
+#include "Scene.h"
 
 const std::string Material::containsMaterialTexture[] = {
 	"m_HasDiffuseTexture",
@@ -68,10 +68,23 @@ void Material::autoPrepare(bool autoFlags) {
 	}
 }
 
+
+ShaderProgram* Material::getShader() {
+	ShaderProgram* program = isShader(getInstanceById(shader));
+	if (!program) {
+		program = (ShaderProgram*)isShader(getInstanceById(Scene::coreShader));
+	}
+
+	if (!program) {
+		return nullptr;
+	}
+
+	return program;
+	
+}
 void Material::applyMaterial() {
 	
-	ShaderProgram* program = isShader(getInstanceById(shader));
-	if (!program) return;
+	ShaderProgram* program = getShader();
 	
 	program->useProgram();
 	for (int i = 0; i < eMaterialTexture_MAX; ++i) {

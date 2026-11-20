@@ -1,13 +1,11 @@
 #pragma once
 #include "GameInstance.h"
 #include "Graphics/matrix.h"
-class Camera : public Instance
+#include "SpatialInstance.h"
+class Camera : public SpatialInstance
 {
 public:
-	vec3 position;
-	vec3 rotation;
 
-	mat4 transform;
 	mat4 projection;
 	mat3 look;
 	//Essentially the 2D direction of the camera, ignoring the Y axis. This is used for movement and other calculations.

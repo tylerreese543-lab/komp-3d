@@ -28,7 +28,7 @@ struct vec2 {
 		return vec2(X * r.X, Y * r.Y);
 	}
 	inline vec2 operator/ (const vec2& r) const {
-		return vec2(X / r.X, Y * r.Y);
+		return vec2(X / r.X, Y / r.Y);
 	}
 };
 struct vec4 {
@@ -69,6 +69,11 @@ struct vec3 {
 	float gmag();
 	vec3 smag(float);
 	vec3(const char*);
+
+	operator std::string() const {         return "(" + std::to_string(X) + ", " 
+                   + std::to_string(Y) + ", " 
+                   + std::to_string(Z) + ")";}
+
 	inline vec3 operator* (const float& r) const {
 		return vec3(X * r, Y * r, Z * r);
 	}
@@ -115,6 +120,8 @@ struct vec3 {
 	float dot(const vec3& other) const {
 		return X * other.X + Y * other.Y + Z * other.Z;
 	}
+
+	static vec3 axis(int axis);
 	bool operator==(const vec3& other) const;
 };
 struct mat4 {
@@ -143,21 +150,107 @@ struct mat4 {
 		}
 		return return_matrix;
 	}
-	inline vec4 operator* (vec4& vec) const {
-		vec4 returnv4;
-		//TODO: replace this with column major multiplication
-		returnv4.X = vec.X * m[0][0] + vec.Y * m[1][0] + vec.Z * m[2][0] + vec.W * m[3][0];
-		returnv4.Y = vec.X * m[0][1] + vec.Y * m[1][1] + vec.Z * m[2][1] + vec.W * m[3][1];
-		returnv4.Z = vec.X * m[0][2] + vec.Y * m[1][2] + vec.Z * m[2][2] + vec.W * m[3][2];
-		returnv4.W = vec.X * m[0][3] + vec.Y * m[1][3] + vec.Z * m[2][3] + vec.W * m[3][3];
+
+	mat4 inverse() const {
+	mat4 inv;
+
+	// 1. Precompute 2x2 sub-determinants for the top two rows (rows 0 and 1)
+	float s0 = m[0][0] * m[1][1] - m[1][0] * m[0][1];
+	float s1 = m[0][0] * m[1][2] - m[1][0] * m[0][2];
+	float s2 = m[0][0] * m[1][3] - m[1][0] * m[0][3];
+	float s3 = m[0][1] * m[1][2] - m[1][1] * m[0][2];
+	float s4 = m[0][1] * m[1][3] - m[1][1] * m[0][3];
+	float s5 = m[0][2] * m[1][3] - m[1][2] * m[0][3];
+
+	// 2. Precompute 2x2 sub-determinants for the bottom two rows (rows 2 and 3)
+	float c5 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
+	float c4 = m[2][1] * m[3][3] - m[3][1] * m[2][3];
+	float c3 = m[2][1] * m[3][2] - m[3][1] * m[2][2];
+	float c2 = m[2][0] * m[3][3] - m[3][0] * m[2][3];
+	float c1 = m[2][0] * m[3][2] - m[3][0] * m[2][2];
+	float c0 = m[2][0] * m[3][1] - m[3][0] * m[2][1];
+
+	// 3. Calculate the 4x4 Determinant
+	float det = s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0;
+
+	// Fallback if the matrix is singular (determinant is 0)
+	if (det == 0.0f) {
+		return mat4::identity();
 	}
-	inline vec3 operator* (vec3 vec) const {
-		vec3 returnv3;
-		returnv3.X = vec.X * m[0][0] + vec.Y * m[1][0] + vec.Z * m[2][0] + 1 * m[3][0];
-		returnv3.Y = vec.X * m[0][1] + vec.Y * m[1][1] + vec.Z * m[2][1] + 1 * m[3][1];
-		returnv3.Z = vec.X * m[0][2] + vec.Y * m[1][2] + vec.Z * m[2][2] + 1 * m[3][2];
-		return returnv3;
-	}
+
+	float invDet = 1.0f / det;
+
+	// 4. Form the Inverse Matrix (transposed cofactors * invDet)
+	inv.m[0][0] = ( m[1][1] * c5 - m[1][2] * c4 + m[1][3] * c3) * invDet;
+	inv.m[0][1] = (-m[0][1] * c5 + m[0][2] * c4 - m[0][3] * c3) * invDet;
+	inv.m[0][2] = ( m[3][1] * s5 - m[3][2] * s4 + m[3][3] * s3) * invDet;
+	inv.m[0][3] = (-m[2][1] * s5 + m[2][2] * s4 - m[2][3] * s3) * invDet;
+
+	inv.m[1][0] = (-m[1][0] * c5 + m[1][2] * c2 - m[1][3] * c1) * invDet;
+	inv.m[1][1] = ( m[0][0] * c5 - m[0][2] * c2 + m[0][3] * c1) * invDet;
+	inv.m[1][2] = (-m[3][0] * s5 + m[3][2] * s2 - m[3][3] * s1) * invDet;
+	inv.m[1][3] = ( m[2][0] * s5 - m[2][2] * s2 + m[2][3] * s1) * invDet;
+
+	inv.m[2][0] = ( m[1][0] * c4 - m[1][1] * c2 + m[1][3] * c0) * invDet;
+	inv.m[2][1] = (-m[0][0] * c4 + m[0][1] * c2 - m[0][3] * c0) * invDet;
+	inv.m[2][2] = ( m[3][0] * s4 - m[3][1] * s2 + m[3][3] * s0) * invDet;
+	inv.m[2][3] = (-m[2][0] * s4 + m[2][1] * s2 - m[2][3] * s0) * invDet;
+
+	inv.m[3][0] = (-m[1][0] * c3 + m[1][1] * c1 - m[1][2] * c0) * invDet;
+	inv.m[3][1] = ( m[0][0] * c3 - m[0][1] * c1 + m[0][2] * c0) * invDet;
+	inv.m[3][2] = (-m[3][0] * s3 + m[3][1] * s1 - m[3][2] * s0) * invDet;
+	inv.m[3][3] = ( m[2][0] * s3 - m[2][1] * s1 + m[2][2] * s0) * invDet;
+
+	return inv;
+}
+inline vec4 operator*(const vec4& vec) const {
+	vec4 returnv4;
+
+	returnv4.X =
+		vec.X * m[0][0] +
+		vec.Y * m[0][1] +
+		vec.Z * m[0][2] +
+		vec.W * m[0][3];
+
+	returnv4.Y =
+		vec.X * m[1][0] +
+		vec.Y * m[1][1] +
+		vec.Z * m[1][2] +
+		vec.W * m[1][3];
+
+	returnv4.Z =
+		vec.X * m[2][0] +
+		vec.Y * m[2][1] +
+		vec.Z * m[2][2] +
+		vec.W * m[2][3];
+
+	returnv4.W =
+		vec.X * m[3][0] +
+		vec.Y * m[3][1] +
+		vec.Z * m[3][2] +
+		vec.W * m[3][3];
+
+	return returnv4;
+}
+
+inline vec3 operator*(const vec3& vec) const {
+	return vec3(
+		vec.X * m[0][0] +
+		vec.Y * m[0][1] +
+		vec.Z * m[0][2] +
+		m[0][3],
+
+		vec.X * m[1][0] +
+		vec.Y * m[1][1] +
+		vec.Z * m[1][2] +
+		m[1][3],
+
+		vec.X * m[2][0] +
+		vec.Y * m[2][1] +
+		vec.Z * m[2][2] +
+		m[2][3]
+	);
+}
 
 	operator const float* () const {
 		return &m[0][0];

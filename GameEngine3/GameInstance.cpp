@@ -3,6 +3,7 @@
 int Instance::currentinstanceID = 0;
 std::map<int, Instance*> Instance::world;
 std::set<Instance*> Instance::destroyQueue;
+std::set<int> Instance::activeWorld;
 std::map<unsigned int, unsigned int> Instance::instanceHierarchyMap;
 void Instance::registerHierarchy() {
 	instanceHierarchyMap = {
@@ -13,7 +14,7 @@ void Instance::registerHierarchy() {
 	{InstanceType_Resource, InstanceType_Base},
 	{InstanceType_ShaderProgram, InstanceType_Base},
 	{InstanceType_Camera, InstanceType_Base},
-	{InstanceType_Mesh, InstanceType_Base},
+	{InstanceType_Mesh, InstanceType_Spatial},
 	{InstanceType_Scene, InstanceType_Base},
 	{InstanceType_Material, InstanceType_Base},
 	{InstanceType_Geometry, InstanceType_Resource},
@@ -29,14 +30,15 @@ void Instance::registerHierarchy() {
 	{InstanceType_InstanceValue, InstanceType_Value},
 	{InstanceType_Vector3Value, InstanceType_Value},
 
-	{InstanceType_Collision2D, InstanceType_Base},
-	{InstanceType_Collision3D, InstanceType_Base},
+	{InstanceType_Collision2D, InstanceType_Spatial},
+	{InstanceType_Collision3D, InstanceType_Spatial},
 	{ InstanceType_ProceduralGeometry, InstanceType_Geometry},
-	{ InstanceType_TextGeometry, InstanceType_Mesh },
+	{ InstanceType_TextGeometry, InstanceType_Mesh},
 	{InstanceType_UIRootNode, InstanceType_Base},
-	{InstanceType_Audio, InstanceType_Base},
+	{InstanceType_Audio, InstanceType_Spatial},
 	{InstanceType_Folder, InstanceType_Base},
-	{InstanceType_PointLight, InstanceType_Base},
+	{InstanceType_PointLight, InstanceType_Spatial},
+	{InstanceType_Spatial, InstanceType_Base},
 	};
 }
 
@@ -79,6 +81,7 @@ const std::string Instance::instanceTypeNames[Instance::InstanceType_Count] = {
 	"Audio",
 	"Folder",
 	"PointLight",
+	"Spatial",
 };
 Instance::Instance() {
 	instanceId = -1;
@@ -91,11 +94,15 @@ Instance::Instance() {
 	saveToFile = true;
 	isEditorIntrinsic = false;
 	registerInstance(this);
+
+	isActive = false;
+	this->makeActive();
 }
 
 Folder::Folder() : Instance() {
 	name = "Folder";
 	type = InstanceType_Folder;
+	storageFolder = false;
 }
 
 Instance::~Instance() {}
@@ -104,21 +111,24 @@ Instance* Instance::clone_this() {
 	return registerInstance(new Instance(*this), true);
 }
 Instance* Instance::clone() {
+
 	Instance* i = this->clone_this();
 
 	i->children.clear();
 
+	std::set<Instance*> cloned_instances;
 	for (Instance* child : children) {
 		child->clone()->setParent(i);
 	}
-
 	i->setParent(parent);
 	return i;
 }
 int Instance::destroy() {
+	this->makeInactive();
 	for (Instance* child : children) {
-		child->destroy();
+		getInstanceById(child->getId())->destroy();
 	}
+	this->parent = nullptr;
 	world[instanceId] = nullptr;
 	instanceId = -1;
 	delete this;
@@ -141,14 +151,22 @@ int Instance::addChild(Instance* child) {
 	// Check if the child is already in the children vector
 	children.insert(child);
 	child->parent = this;
+
+	//TODO: shorthand, doesn't work for upper parent changing.
+	//child->isActive = child->isInstanceDescendantOfInactiveFolder();
 	return 0;
 }
 
 int Instance::setParent(Instance* p) {
 	if (p == nullptr) {
-		return -1; // Invalid parent
+		if (parent != nullptr) {
+			parent->children.erase(this);
+		}
+		parent = nullptr;
 	}
-	p->addChild(this);
+	else {
+		p->addChild(this);
+	}
 	return 0;
 }
 
@@ -301,7 +319,9 @@ std::string Instance::getEngineGUIHash() {
 
 void Instance::handleDestroyQueue() {
 	for (Instance* inst : destroyQueue) {
-		inst->parent->children.erase(inst);
+		if (inst->parent) {
+			inst->parent->children.erase(inst);
+		}
 		inst->destroy();
 
 	}
@@ -329,9 +349,62 @@ int Instance::getNumSaveBytes() {
 }
 
 bool Instance::omitFromSave() {
-	return isEditorIntrinsic;
+	return isEditorIntrinsic || !parent;
 }
 
 bool Instance::omitFromHierarchyRender() {
 	return this->omitFromSave();
+}
+
+bool Instance::shouldWriteToFile() {
+
+	if (omitFromSave()) return false;
+	if (!parent) return true;
+	return parent->shouldWriteToFile();
+}
+
+bool Instance::is(int typ) {
+	return type == typ;
+}
+bool Instance::isInstanceDescendantOfInactiveFolder() {
+	if (!parent) return false;
+	Folder* pFolder = (Folder*)parent;
+	if (!pFolder->is(InstanceType_Folder)) return pFolder->isInstanceDescendantOfInactiveFolder();
+	if (pFolder->storageFolder) return true;
+	return pFolder->isInstanceDescendantOfInactiveFolder();
+}
+
+int Folder::getNumSaveBytes() {
+	int size = Instance::getNumSaveBytes() + sizeof(bool);
+	return size;
+}
+
+int Folder::saveInstanceToFile(FILE* file) {
+	Instance::saveInstanceToFile(file);
+	fwrite(&storageFolder, sizeof(bool), 1, file);
+	return 0; //TODO: return the size of the data written to the file, may not be needed however
+}
+
+int Folder::loadInstanceFromFile(void* data, int off) {
+	int o = off;
+	o += Instance::loadInstanceFromFile(data, o);
+	storageFolder = *(bool*)offset(data, o);
+	o += sizeof(bool);
+	return o - off;
+}
+
+void Instance::makeActive() {
+
+	if (!isRegistered(this)) return;
+	if (!isActive) {
+		isActive = true;
+		activeWorld.insert(getId());
+	}
+}
+void Instance::makeInactive() {
+	if (!isRegistered(this)) return;
+	if (isActive) {
+		isActive = false;
+		activeWorld.erase(getId());
+	}
 }

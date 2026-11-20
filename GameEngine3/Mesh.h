@@ -9,6 +9,7 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include "SpatialInstance.h"
 class Geometry : public Resource {
 private:
 public:
@@ -20,6 +21,9 @@ public:
 	bool vboFlags[eVBO_MAX];
 	bool isGeometryInterleaved; 
 	bool autoCreateSmoothedNormals;
+
+	vec3 boundingBoxMin;
+	vec3 boundingBoxMax;
 	Buffer ebo;
 	virtual int generateVAO(BufferLayout* layout);
 	Geometry();
@@ -31,7 +35,7 @@ public:
 	virtual void setVBOFlags(bool hasPositions, bool hasUV, bool hasNormal, bool hasColor, bool hasExtra = false);
 	virtual void autoSearchVBO();
 	//genTangentsToExtra will generate the tangent/bi-tangent and place them in the extra VBO.
-	void loadFromFile(std::string filepath, int meshID = 0, int ImporterFlags = aiProcess_Triangulate | aiProcess_FlipWindingOrder);
+	void loadFromFile(std::string filepath, int meshID = 0, int ImporterFlags = aiProcess_Triangulate | aiProcess_FlipWindingOrder | aiProcess_GenBoundingBoxes);
 
 	virtual int saveInstanceToFile(FILE* file);
 	virtual int loadInstanceFromFile(void* data, int offset = 0);
@@ -92,30 +96,28 @@ public:
 	virtual int loadInstanceFromFile(void* data, int offset = 0);
 };
 
-class Mesh : public Instance {
+class Mesh : public SpatialInstance {
 	//Finds the geometry based on this Mesh's children.
 protected:
 	virtual void setupRenderSettings(bool transparent = false, bool backfaceCulling = true);
-	virtual void calcTransform();
-	static std::set<Mesh*> render_objects;
+	static std::set<int> render_objects;
 	static int distanceQsortCompareFunction(const void* a, const void* b);
 	static vec3 cameraPosition;
 public:
 	const static std::string renderLayerNames[eRenderLayer_MAX];
 	const static int renderLayerEnum[eRenderLayer_MAX];
 
-	vec3 rotation;
-	vec3 position;
-	vec3 scale;
+
 	bool visible;
 	int geometry;
 	int material;
-	mat4 transform;
 	int renderLayer;
 	bool cull;
 
 	//Force the VAO to be regenerated due to shader change/resrt
 	bool VAODirty;
+
+	bool isFramebuffer;
 	virtual void render(Camera* camera, bool transparent = false, int renderLayerTarget = eRenderLayer_World);
 
 
@@ -138,4 +140,7 @@ public:
 	virtual int getNumSaveBytes();
 
 	virtual void finalizeLoad(inst_conv_map* conversionMap);
+
+	virtual void makeActive();
+	virtual void makeInactive();
 };

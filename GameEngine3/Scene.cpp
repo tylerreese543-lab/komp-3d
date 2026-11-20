@@ -12,7 +12,13 @@
 #define END_SEQUENCE_TAG 40
 #define LOAD_LIGHTDATA_TAG 50
 
+
+int Scene::translateInstance[] = {
+	-1, -1, -1
+};
+
 int Scene::debugShader = -1;
+int Scene::coreShader = -1;
 #ifdef STUDIO_EDITOR
 const bool Scene::isStudio = true;
 #else
@@ -72,9 +78,14 @@ void Scene::RenderScene(int passNum) {
 		for (auto pair : Instance::world) {
 			Instance* child = pair.second;
 			if (!child) continue;
+			if (!child->isActive) continue;
 			if (child->type == InstanceType_Camera && isStudio && !child->omitFromHierarchyRender()) {
 				//printf("Rendering debug for camera '%s' (ID %d)\n", child->name.c_str(), child->getId());
 				((Camera*)child)->debugRender();
+			}
+			if (child->type == InstanceType_PointLight && isStudio && !child->omitFromHierarchyRender()) {
+				//printf("Rendering debug for camera '%s' (ID %d)\n", child->name.c_str(), child->getId());
+				((Light*)child)->debugRender();
 			}
 		}
 	}
@@ -104,8 +115,11 @@ Scene* Scene::getCurrentScene() {
 
 Camera* Scene::getCamera() {
 	if (!isIdValid(currentCamera)) {
-		printf("Scene::getCamera: Current camera ID %d is not valid. Attempting to find a valid camera.\n", currentCamera);
-		currentCamera = getChildIdFromType(InstanceType_Camera);
+		//printf("Scene::getCamera: Current camera ID %d is not valid. Attempting to find a valid camera.\n", currentCamera);
+		//currentCamera = getChildIdFromType(InstanceType_Camera);
+
+		currentCamera = -1;
+		return nullptr;
 	}
 	return (Camera*)getInstanceById(currentCamera);
 }
@@ -212,7 +226,7 @@ int Scene::saveSceneToFile(const char* filename) {
 
 	for (auto pair : Instance::world) {
 		if (!pair.second) continue;
-			if (!pair.second->omitFromSave()) {
+			if (pair.second->shouldWriteToFile()) {
 				writeTagAndSizeToFile(LOAD_INSTANCE_TAG, pair.second->getNumSaveBytes(), f_main);
 				printf("Saving instance ID %d, type %d (%s)\n", pair.second->getId(), pair.second->type, Instance::getInstanceNameFromType(pair.second->type).c_str());
 				pair.second->saveInstanceToFile(f_main);
@@ -235,6 +249,11 @@ int Scene::saveSceneToFile(const char* filename) {
 	writeTagAndSizeToFile(END_SEQUENCE_TAG, 0, f_main);
 
 	fclose(f_main);
+}
+
+
+bool Scene::omitFromSave() {
+	return isEditorIntrinsic;
 }
 
 int Scene::loadSceneFromFile(const char* filename) {
@@ -283,6 +302,7 @@ int Scene::loadSceneFromFile(const char* filename) {
 
 			loadedInstanceIds.insert(inst->getId()); // Track the loaded instance ID
 			printf("ID=%d, Said %d, Load %d\n", inst->getId(), numBytes, inst->loadInstanceFromFile(buffer, o));
+			printf("PID=%d\n", inst->parentId);
 			instanceIdConversionMap[inst->savedId] = inst->getId(); // Store the mapping of old ID to new ID
 
 		}
@@ -296,7 +316,7 @@ int Scene::loadSceneFromFile(const char* filename) {
 			Light::deserializeGlobalLightData(buffer, o);
 		}
 		else if (tag == END_SEQUENCE_TAG) {
-			continue;
+			break;
 		}
 
 		o += numBytes;
@@ -316,7 +336,15 @@ int Scene::loadSceneFromFile(const char* filename) {
 	}
 
 	for (int id : loadedInstanceIds) {
-		getInstanceById(id)->finalizeLoad(&instanceIdConversionMap);
+		Instance* i = getInstanceById(id);
+		if (isInstanceOf(i->type, InstanceType_LuaResource)) continue;
+		i->finalizeLoad(&instanceIdConversionMap);
+	}
+
+	for (int id : loadedInstanceIds) {
+		Instance* i = getInstanceById(id);
+		if (!isInstanceOf(i->type, InstanceType_LuaResource)) continue;
+		i->finalizeLoad(&instanceIdConversionMap);
 	}
 	fclose(f_main);
 	printf("Finished loading scene from file: %d instances, acurrent scene ID: %d\n", numInstances, Scene::getCurrentScene()->getId());

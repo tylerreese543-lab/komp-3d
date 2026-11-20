@@ -5,7 +5,6 @@
 #include <IMGUI/imgui_impl_opengl3.h>
 #include <IMGUI/imgui_stdlib.h>
 #include "Graphics/Graphics.h"
-
 #include "GameInstance.h"
 #include <PUGIXML/pugixml.hpp>
 class EngineGUI {
@@ -31,7 +30,6 @@ class EngineGUI {
 	static int maxSamplesAudioPlayback;
 	static int currentSamplesAudioPlayback;
 	static const std::string placeholderNoInstance;
-
 	static bool hasEyeDropCompleted(int id, int reason = 0);
 	static std::string* placeholderName(Instance* inst);
 	static Instance* newInstanceFromType(int type, int p = -1);
@@ -57,4 +55,26 @@ public:
 	static void DrawInspectorNode();
 	static void DrawRightClickVoidContextMenuNode();
 
+
+
+	static float gizmoSnapPhysical; //How much do we snap on translate/scaling
+	static int axisSelected;
+	static bool isGizmoActive;
+	static vec3 mouseRayDirection;
+	static vec3 originalObjectTransform;
+	static vec3 originalObjectAxis;
+
+	static vec3 newTransform;
+	static float gizmoAxisOffset;
+	static void calculateMouseRayDirection();
+
+	static void DrawTranslateGizmo();
+
+	//Short hand for converting rotation to radians;
+	static void DrawRotationFloat3(vec3* edit);
+
+	static void setAxisMovementMode(bool isMoving);
+
+	static float getMoveDistanceAlongAxis();
+	static void updateGizmoObject();
 };

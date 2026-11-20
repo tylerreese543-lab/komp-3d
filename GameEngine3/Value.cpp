@@ -1,12 +1,8 @@
 #include "Value.h"
 
-Value::Value() {
+Value::Value() : Instance() {
 	type = InstanceType_Value;
 	name = "Value";
-}
-
-Instance* Value::clone_this() {
-	return registerInstance(new Value(*this), true);
 }
 
 IntegerValue::IntegerValue() : Value() {

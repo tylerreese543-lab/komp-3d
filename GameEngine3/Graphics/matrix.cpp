@@ -56,9 +56,26 @@ float vec3::gmag() {
 }
 vec3 vec3::smag(float mag) {
 	float f = mag / gmag();
+
+	if (gmag() <= 0.000000001f) {
+		return vec3(0, 0, 0);
+	}
 	return vec3(X * f, Y * f, Z * f);
 }
 
+
+vec3 vec3::axis(int axis) {
+	if (axis == 1) {
+		return vec3(1, 0, 0);
+	}
+	if (axis == 2) {
+		return vec3(0, 1, 0);
+	}
+
+	if (axis == 3) {
+		return vec3(0, 0, 1);
+	}
+}
 mat4::mat4() {
 	this->m[0][0] = 1.0f;
 	this->m[0][1] = 0.0f;
@@ -133,7 +150,7 @@ mat4 mat4::zrot(float rad) {
 	);
 };
 mat4 mat4::yxz(float rad_x, float rad_y, float rad_z) {
-	return  zrot(rad_z) * xrot(rad_x) * yrot(rad_y);
+	return  yrot(rad_y) * xrot(rad_x) * zrot(rad_z);
 }
 mat4 mat4::zxy(float rad_x, float rad_y, float rad_z) {
 	return  yrot(rad_y) * xrot(rad_x) * zrot(rad_z);

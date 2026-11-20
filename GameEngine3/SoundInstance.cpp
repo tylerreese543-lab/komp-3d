@@ -2,7 +2,7 @@
 #include "SoundInstance.h"
 #include "wav_loader/AudioFile.h"
 std::map<std::string, AudioTrack> Audio::cachedAudioTracks;
-Audio::Audio() : Instance() {
+Audio::Audio() : SpatialInstance() {
 	name = "Audio";
 	type = InstanceType_Audio;
 	renderLayer = eRenderLayer_World;
@@ -17,27 +17,24 @@ Audio::Audio() : Instance() {
 }
 
 int Audio::getNumSaveBytes() {
-	return Instance::getNumSaveBytes() + sizeof(vec3) + (audioName.length() + 1) + sizeof(int);
+	return SpatialInstance::getNumSaveBytes() + (audioName.length() + 1) + sizeof(int);
 }
 
 int Audio::saveInstanceToFile(FILE* file) {
 	int offset = 0;
-	offset += Instance::saveInstanceToFile(file);
+	offset += SpatialInstance::saveInstanceToFile(file);
 	offset += fwrite(audioName.c_str(), sizeof(char), audioName.length() + 1, file);
 	offset += fwrite(&renderLayer, sizeof(int), 1, file);
-	offset += fwrite(&position, sizeof(vec3), 1, file);
 	return offset;
 }
 
 int Audio::loadInstanceFromFile(void* data, int off) {
 	int o = off;
-	o += Instance::loadInstanceFromFile(data, o);
+	o += SpatialInstance::loadInstanceFromFile(data, o);
 	audioName = std::string((char*)offset(data, o));
 	o += audioName.length() + 1;
 	renderLayer = *(int*)offset(data, o);
 	o += sizeof(int);
-	position = *(vec3*)offset(data, o);
-	o += sizeof(vec3);
 
 	return o - off;
 }
@@ -238,8 +235,10 @@ void Audio::update(float deltaTime, bool isStudio) {
         return;
 	}
     if (renderLayer != eRenderLayer_World && !isEditor && !getAudioTrack()->isStereo) {
+
+		vec3 worldPos = getWorldPosition();
         alSourcei(audioId, AL_SOURCE_RELATIVE, AL_FALSE);
-        alSourcefv(audioId, AL_POSITION, (float*)&position);
+        alSourcefv(audioId, AL_POSITION, (float*)&worldPos);
     }
     else {
         alSourcei(audioId, AL_SOURCE_RELATIVE, AL_TRUE);

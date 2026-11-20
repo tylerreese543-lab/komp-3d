@@ -8,6 +8,8 @@
 #include <fstream>
 #include <OPENAL_1.1/include/al.h>
 #include <OPENAL_1.1/include/alc.h>
+
+#include "SpatialInstance.h"
 class AudioTrack {
 protected:
 	void loadMP3(std::string filepath);
@@ -28,14 +30,13 @@ public:
 	int getNumSaveBytes();
 	static int deserializeFromFile(void* data, int offset = 0);
 };
-class Audio : public Instance
+class Audio : public SpatialInstance
 {
 protected:
 	
 public:
 	static std::map<std::string, AudioTrack> cachedAudioTracks;
 	static int InitializeAudioEngine();
-	vec3 position;
 	//Whether the sound is positional
 	int renderLayer;
 	std::string audioName;

@@ -99,6 +99,7 @@ public:
 
 	static vec4 backgroundColor;
 
+	static vec3 debugDefaultColor;
 	int initializeWindow(int width, int height, const char* title);
 	void initializeDeferredRendering();
 

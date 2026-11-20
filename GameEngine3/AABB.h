@@ -1,6 +1,7 @@
 #pragma once
 #include "GameInstance.h"
 #include "Graphics/matrix.h"
+#include "SpatialInstance.h"
 class AABB2D
 {
 public:
@@ -26,15 +27,21 @@ class AABB3D
 	bool contains(const vec3& point) const;
 };
 
-class Collision3D : public Instance
+class Collision3D : public SpatialInstance
 {
-	vec3 position;
-	vec3 size;
 	AABB3D boundingBox;
 
 	static std::set<int> allCollisionBoxes;
+
+
+	void getBoundingBoxFromPosition();
+	void getBoundingBoxFromCorners(vec3* corners = nullptr);
 public:
 
+	//Preserves the size of the collider when rotated. Rotated colliders can be effectively much larger than the original axis-aligned bounding box.
+	bool preserveRotatedSize;
+	bool alwaysUpdate;
+	bool wrapAroundParentMesh; //If this collider is a child of a mesh, it will automatically wrap around the mesh's bounding box instead of using the local 0-1 cube.
 	static void RenderAllCollisionBoxesDebug();
 	virtual Instance* clone_this();
 	bool checkCollision(Collision3D* other) const;
@@ -46,6 +53,9 @@ public:
 	vec3 getSize() const;
 
 	vec3 getCenter() const;
+
+	virtual void update(float deltaTime, bool isStudio);
+	void updateBoundingBox();
 	Collision3D();
 	virtual int destroy();
 	virtual int saveInstanceToFile(FILE* file);
@@ -53,9 +63,13 @@ public:
 
 	virtual int getNumSaveBytes();
 
+	virtual void makeActive();
+	virtual void makeInactive();
+
 	void debugRender();
 };
 
+//TODO: derive Collison2D from SpatialInstance;
 class Collision2D : public Instance
 {
 	vec2 position;

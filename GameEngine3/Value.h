@@ -3,7 +3,6 @@
 #include "Graphics/matrix.h"
 class Value : public Instance {
 public:
-	virtual Instance* clone_this();
 
 	Value();
 };

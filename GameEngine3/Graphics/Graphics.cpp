@@ -4,6 +4,8 @@
 Graphics* Graphics::instance = nullptr;
 
 vec4 Graphics::backgroundColor = vec4(0.0, 0.0, 0.0, 1.0);
+
+vec3 Graphics::debugDefaultColor = vec3(1.0, 1.0, 1.0);
 Graphics::Graphics() {
 	viewportWidth = 800;
 	viewportHeight = 600;
@@ -199,13 +201,16 @@ void MouseData::SetButtonCallback(int button, int action, int mods) {
 			ImGuiIO& io = ImGui::GetIO();
 
 		if (io.WantCaptureMouse) {
+			EngineGUI::isGizmoActive = false;
 			return;
-			}
+		}
 	if (action == GLFW_PRESS) {
 		if (button == GLFW_MOUSE_BUTTON_LEFT) {
 			for (sol::protected_function& f : on_left_click.connections) {
 				f(mods);
 			}
+			
+			EngineGUI::setAxisMovementMode(true);
 		} else if(button == GLFW_MOUSE_BUTTON_MIDDLE) {
 			for (sol::protected_function& f : on_right_click.connections) {
 				f(mods);
@@ -217,12 +222,14 @@ void MouseData::SetButtonCallback(int button, int action, int mods) {
 			for (sol::protected_function& f : on_left_release.connections) {
 				f(mods);
 			}
+			EngineGUI::setAxisMovementMode(false);
 		} else if(button == GLFW_MOUSE_BUTTON_MIDDLE) {
 			for (sol::protected_function& f : on_right_release.connections) {
 				f(mods);
 			}
 		}
 	}
+
 }
 
 void KeyboardData::SetKeyCallback(int key, int scancode, int action, int mods) {
