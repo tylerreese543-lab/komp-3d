@@ -12,7 +12,7 @@ void Instance::registerHierarchy() {
 	{InstanceType_Base, -1},
 	{InstanceType_RenderObject, InstanceType_Base},
 	{InstanceType_Resource, InstanceType_Base},
-	{InstanceType_ShaderProgram, InstanceType_Base},
+	{InstanceType_ShaderProgram, InstanceType_Resource},
 	{InstanceType_Camera, InstanceType_Base},
 	{InstanceType_Mesh, InstanceType_Spatial},
 	{InstanceType_Scene, InstanceType_Base},

@@ -70,6 +70,9 @@ public:
 
 	static void DrawTranslateGizmo();
 
+	static void selectInstance(Instance* inst);
+	static void updateSelectedInstanceHash();
+
 	//Short hand for converting rotation to radians;
 	static void DrawRotationFloat3(vec3* edit);
 

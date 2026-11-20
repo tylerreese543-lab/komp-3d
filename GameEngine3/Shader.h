@@ -10,13 +10,27 @@
 #include "Resource.h"
 class ShaderResource : public Resource {
 public:
+
+
+	const static std::string coreShaderSourceInjectionPoint;
+	const static std::string coreShaderSourcePath[2];
+	const static std::string coreShaderPortNames[2];
+
+	static std::string coreShaderSource[2][2];
 	static const std::string shaderTypeNames[2];
 	static const GLenum shaderTypeEnums[2];
 	GLuint id;
 	GLenum shaderType;
-	char* source;
+	std::string source;
 	int compileResult;
 	bool compiled;
+
+	static void LoadCoreShaderSources();
+
+	std::string getFullShaderSourceCode();
+	std::string getShaderSourceCode();
+	static std::string getShaderCodeFromSource(std::string* source, GLenum t);
+	static std::string getFullShaderCodeFromSource(std::string* source, GLenum t);
 	int loadFromFile(const char* filepath);
 	int compileShader();
 	bool isCompiled();
@@ -38,7 +52,12 @@ class ShaderProgram : public Resource {
 private:
 	int U(std::string uniform);
 
+	//Loads it's own shader from file and creates a program with it. New shader logic does not need ShaderResources at all for shaders technically
+	int createProgramStandalone();
+	int compileShaderStandalone(GLenum t, std::string* source = nullptr);
+	std::string loadSourceFromFile();
 public:
+	
 	std::string shaderAttributeNames[eVAttribute_MAX];
 	std::string shaderUniformNames[eSUniform_MAX];
 	std::string shaderTextureNames[eMaterialTexture_MAX];

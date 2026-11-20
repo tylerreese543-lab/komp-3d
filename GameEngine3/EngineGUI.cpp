@@ -97,6 +97,36 @@ void EngineGUI::InitializeEngineGUI() {
 	}
 
 }
+
+void EngineGUI::selectInstance(Instance* inst) {
+	if (inst) {
+		selectedInstanceId = inst->getId();
+		newInstanceSelected = true;
+		//debug_log("Selected instance ID #%d \"%s\"\n", selectedInstanceId, inst->name.c_str());
+	}
+	else {
+		selectedInstanceId = -1;
+		newInstanceSelected = true;
+		//debug_log("Deselected instance\n");
+	}
+	updateSelectedInstanceHash();
+}
+
+void EngineGUI::updateSelectedInstanceHash() {
+	if (selectedInstanceId != -1) {
+		Instance* inst = Instance::getInstanceById(selectedInstanceId);
+		if (inst) {
+			selectedInstanceHash = inst->getEngineGUIHash();
+		}
+		else {
+			selectedInstanceHash = "";
+			selectedInstanceId = -1;
+		}
+	}
+	else {
+		selectedInstanceHash = "";
+	}
+}
 void EngineGUI::DrawHierarchyNode(Instance* instance) {
 	if (!instance) return;
 
@@ -121,7 +151,8 @@ void EngineGUI::DrawHierarchyNode(Instance* instance) {
 		//printf("Drawing for Instance %s\n", instance->name.c_str());
 		if (ImGui::MenuItem("Clone")) {
 			// Do action
-			instance->clone();
+			selectInstance(instance->clone());
+			
 		}
 		if (ImGui::MenuItem("Delete")) {
 			// Do action
@@ -145,10 +176,7 @@ void EngineGUI::DrawHierarchyNode(Instance* instance) {
 			debug_log("Eye dropped on ID #%d \"%s\"\n", eyeDropperId, instance->name.c_str());
 		}
 		else {
-			selectedInstanceHash = instance->getEngineGUIHash();
-			selectedInstanceId = instance->getId();
-			newInstanceSelected = true;
-			debug_log("Selected instance ID #%d \"%s\"\n", selectedInstanceId, instance->name.c_str());
+			selectInstance(instance);
 		}
 	}
 
@@ -432,6 +460,11 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 			if (inst->type == Instance::InstanceType_Geometry) {
 				Geometry* imgRes = (Geometry*)inst;
 				imgRes->loadFromFile(m->filePath.c_str());
+			}
+
+			if (inst->type == Instance::InstanceType_ShaderProgram) {
+				ShaderProgram* imgRes = (ShaderProgram*)inst;
+				imgRes->createProgram();
 			}
 		}
 		renderTooltipForItem(IDS_IATTR_FILEPATH);

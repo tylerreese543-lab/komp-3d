@@ -22,6 +22,7 @@ int main() {
 	graphics->initializeDeferredRendering();
 	LuaResource::InitializeLua();
 
+	ShaderResource::LoadCoreShaderSources();
 	EngineGUI::InitializeEngineGUI();
 	Audio::InitializeAudioEngine();
 	Light::InitializeLightingUBO();
@@ -55,7 +56,8 @@ int main() {
 
 	TextGeometry::loadFont("res://fonts/DroidSans.ttf");
 	//render_shader->isEditorIntrinsic = true;
-	ShaderProgram* pp_shader = new ShaderProgram("core://shader/quad_vertex.glsl", "core://shader/quad_fragment.glsl");
+	ShaderProgram* pp_shader = new ShaderProgram();
+	pp_shader->filePath = "core://shader/quad_shader.glsl";
 	pp_shader->createProgram();
 	pp_shader->setParent(resources);
 	pp_shader->name = "PostProcessingShader";
@@ -63,9 +65,10 @@ int main() {
 #endif
 
 	ShaderProgram* core_shader = new ShaderProgram("core://shader/core_vertex.glsl", "core://shader/core_fragment.glsl");
+	core_shader->isEditorIntrinsic = true;
 	core_shader->createProgram();
 	core_shader->name = "MainShader";
-	core_shader->isEditorIntrinsic = true;
+
 	Scene::coreShader = core_shader->getId();
 	
 	ProceduralGeometry* shaderQuadGeom = new ProceduralGeometry();
@@ -95,16 +98,18 @@ int main() {
 
 	ShaderProgram* debug_shader = new ShaderProgram("core://shader/debug_vertex.glsl", "core://shader/debug_fragment.glsl");
 	debug_shader->setDefaultOutputPort(eMaterialTexture_Diffuse, "color");
+	debug_shader->isEditorIntrinsic = true;
 	debug_shader->createProgram();
 	debug_shader->name = "DebugShader";
-	debug_shader->isEditorIntrinsic = true;
+
 	Scene::debugShader = debug_shader->getId();
 
 	
 	ShaderProgram* render_shader = new ShaderProgram("core://shader/lighting_vertex.glsl", "core://shader/lighting_fragment.glsl");
+	render_shader->isEditorIntrinsic = true;
 	render_shader->createProgram();
 	render_shader->name = "RenderShader";
-	render_shader->isEditorIntrinsic = true;
+
 	/*
 	* 
 	TODO: Add static instance ID ports for debug shader 
@@ -254,6 +259,7 @@ int main() {
 			
 			EngineGUI::newInstanceSelected = false;
 			EngineGUI::isHierarchyFocused = ImGui::IsWindowFocused();
+			EngineGUI::updateSelectedInstanceHash();
 			EngineGUI::DrawHierarchyNode(scene->getCurrentScene());
 			
 			ImGui::End();

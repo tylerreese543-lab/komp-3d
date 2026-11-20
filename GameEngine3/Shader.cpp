@@ -1,5 +1,185 @@
 #include "Shader.h"
 
+#include <string>
+#include <string_view>
+#include <utility>
+#include <cctype>
+
+
+const std::string ShaderResource::coreShaderPortNames[2] = {
+	"vertex_main",
+	"fragment_main"
+};
+const std::string ShaderResource::coreShaderSourceInjectionPoint = "// --- [INJECT USER CODE HERE] ---";
+const std::string ShaderResource::coreShaderSourcePath[] = {
+	"core://shader/core_vertex_wrapper.glsl",
+	"core://shader/core_fragment_wrapper.glsl"
+};
+
+std::string ShaderResource::coreShaderSource[][2] = {
+	{"", ""}, //Vertex Shader
+	{"", ""}  //Fragment Shader
+};
+
+void ShaderResource::LoadCoreShaderSources() {
+	for (int i = 0; i < 2; i++) {
+		FILE* file = openResourceFile(coreShaderSourcePath[i]);
+		if (!file) {
+			printf("ERROR: Failed to load core shader source from '%s'.\n", coreShaderSourcePath[i].c_str());
+			continue;
+		}
+		fseek(file, 0, SEEK_END);
+		size_t size = ftell(file);
+		fseek(file, 0, SEEK_SET);
+		char* buffer = new char[size + 1];
+		fread(buffer, sizeof(char), size, file);
+		buffer[size] = '\0';
+
+		std::string shaderSource;
+		shaderSource = buffer;
+
+		std::string header = shaderSource.substr(0, shaderSource.find(coreShaderSourceInjectionPoint));
+		std::string footer = shaderSource.substr(shaderSource.find(coreShaderSourceInjectionPoint) + coreShaderSourceInjectionPoint.length());
+
+		coreShaderSource[i][0] = header;
+		coreShaderSource[i][1] = footer;
+		delete[] buffer;
+		fclose(file);
+	}
+}
+
+
+std::string ShaderResource::getFullShaderCodeFromSource(std::string* source, GLenum t) {
+	std::string sourceConcat[3] = {"", "", ""};
+	sourceConcat[1] = getShaderCodeFromSource(source, t);
+
+	if (t == GL_VERTEX_SHADER) {
+		sourceConcat[0] = coreShaderSource[0][0];
+		sourceConcat[2] = coreShaderSource[0][1];
+	} else if (t == GL_FRAGMENT_SHADER) {
+		sourceConcat[0] = coreShaderSource[1][0];
+		sourceConcat[2] = coreShaderSource[1][1];
+	}
+	return sourceConcat[0] + sourceConcat[1] + sourceConcat[2];
+}
+std::string ShaderResource::getFullShaderSourceCode() {
+	return getFullShaderCodeFromSource(&source, shaderType);
+}
+std::string ShaderResource::getShaderCodeFromSource(std::string* source, GLenum t) {
+    // Plain integer states instead of an enum: 0 = Code, 1 = LineComment, 2 = BlockComment
+    auto findFunctionSpan = [](std::string_view code, std::string_view funcName) -> std::pair<size_t, size_t> {
+        int state = 0;
+        size_t funcPos = std::string_view::npos;
+
+        // 1. Scan for the standalone function name while skipping comments
+        for (size_t i = 0; i < code.size(); ++i) {
+            if (state == 0) {
+                if (code.substr(i, 2) == "//") {
+                    state = 1;
+                    i++;
+                } else if (code.substr(i, 2) == "/*") {
+                    state = 2;
+                    i++;
+                } else if (code.substr(i, funcName.size()) == funcName) {
+                    bool leftClear = (i == 0) || (!std::isalnum(static_cast<unsigned char>(code[i - 1])) && code[i - 1] != '_');
+                    bool rightClear = (i + funcName.size() >= code.size()) || (!std::isalnum(static_cast<unsigned char>(code[i + funcName.size()])) && code[i + funcName.size()] != '_');
+                    
+                    if (leftClear && rightClear) {
+                        funcPos = i;
+                        break;
+                    }
+                }
+            } else if (state == 1) {
+                if (code[i] == '\n') state = 0;
+            } else if (state == 2) {
+                if (code.substr(i, 2) == "*/") {
+                    state = 0;
+                    i++;
+                }
+            }
+        }
+
+        if (funcPos == std::string_view::npos) {
+            return { std::string::npos, std::string::npos };
+        }
+
+        // 2. Walk backwards to the start of the line (or end of a preceding block comment)
+        size_t start = 0;
+        for (size_t i = funcPos; i > 0; --i) {
+            if (code[i - 1] == '\n') {
+                start = i;
+                break;
+            }
+            if (i >= 2 && code[i - 2] == '*' && code[i - 1] == '/') {
+                start = i;
+                break;
+            }
+        }
+
+        // 3. Scan forward from funcPos to count braces, ignoring comments
+        int depth = 0;
+        bool foundOpenBrace = false;
+        state = 0;
+
+        for (size_t i = funcPos + funcName.size(); i < code.size(); ++i) {
+            if (state == 0) {
+                if (code.substr(i, 2) == "//") {
+                    state = 1;
+                    i++;
+                } else if (code.substr(i, 2) == "/*") {
+                    state = 2;
+                    i++;
+                } else if (code[i] == '{') {
+                    depth++;
+                    foundOpenBrace = true;
+                } else if (code[i] == '}') {
+                    depth--;
+                    if (foundOpenBrace && depth == 0) {
+                        return { start, i + 1 };
+                    }
+                }
+            } else if (state == 1) {
+                if (code[i] == '\n') state = 0;
+            } else if (state == 2) {
+                if (code.substr(i, 2) == "*/") {
+                    state = 0;
+                    i++;
+                }
+            }
+        }
+
+        return { std::string::npos, std::string::npos };
+    };
+
+    auto maskOutSpan = [](std::string_view code, std::pair<size_t, size_t> span) -> std::string {
+        std::string result(code);
+        if (span.first == std::string::npos || span.second == std::string::npos) {
+            return result;
+        }
+
+        for (size_t i = span.first; i < span.second; ++i) {
+            if (result[i] != '\n') {
+                result[i] = ' ';
+            }
+        }
+        return result;
+    };
+
+
+    // Vertex gets everything except fragment_main; Fragment gets everything except vertex_main
+    
+	if (t == GL_VERTEX_SHADER) {
+		return maskOutSpan(*source, findFunctionSpan(*source, coreShaderPortNames[1]));
+	} else if (t == GL_FRAGMENT_SHADER) {
+		return maskOutSpan(*source, findFunctionSpan(*source, coreShaderPortNames[0]));
+	} else {
+		return *source; // Fallback for unknown shader types
+	}
+}
+
+std::string ShaderResource::getShaderSourceCode() {
+	return getShaderCodeFromSource(&source, shaderType);
+}
 const std::string ShaderResource::shaderTypeNames[] = {
 	"Vertex Shader",
 	"Fragment Shader"
@@ -9,13 +189,12 @@ const GLenum ShaderResource::shaderTypeEnums[] = {
 	GL_FRAGMENT_SHADER
 };
 ShaderResource::ShaderResource() : Resource() {
-	printf("New Shader Instance\n");
 	name = "Shader";
 	type = InstanceType_ShaderResource;
 	id = 0;
 	compiled = false;
 	compileResult = 0;
-	source = nullptr;
+	source = "";
 	shaderType = GL_VERTEX_SHADER;
 
 }
@@ -36,9 +215,11 @@ int ShaderResource::loadFromFile(const char* filepath) {
 	fseek(file, 0, SEEK_END);
 	size_t size = ftell(file);
 	fseek(file, 0, SEEK_SET);
-	source = new char[size + 1];
-	fread(source, sizeof(char), size, file);
-	source[size] = '\0';
+	char* buffer = new char[size + 1];
+	fread(buffer, sizeof(char), size, file);
+	buffer[size] = '\0';
+	source = buffer;
+	delete[] buffer;
 	fclose(file);
 	return 0;
 }
@@ -52,11 +233,20 @@ int ShaderResource::compileShader() {
 		id = 0;
 	}
 	id = glCreateShader(shaderType);
-	if (!source) {
+	if (source.empty()) {
 		printf("ERROR: No source code provided for shader '%s'.\n", filePath.c_str());
 		return -1;
 	}
-	glShaderSource(id, 1, &source, nullptr);
+
+	if (isEditorIntrinsic) {
+		const char* source_cstr = source.c_str();
+		glShaderSource(id, 1, &source_cstr, nullptr);
+	}
+	else {
+		std::string shaderConcat = getFullShaderSourceCode();
+		const char* shaderConcat_cstr = shaderConcat.c_str();
+		glShaderSource(id, 1, &shaderConcat_cstr, nullptr);
+	}
 	glCompileShader(id);
 	glGetShaderiv(id, GL_COMPILE_STATUS, &compileResult);
 	if (compileResult != GL_TRUE) {
@@ -161,6 +351,75 @@ int ShaderProgram::linkProgram() {
 	return 0;
 }
 
+std::string ShaderProgram::loadSourceFromFile() {
+	FILE* file = openResourceFile(filePath);
+	if (!file) return "";
+	fseek(file, 0, SEEK_END);
+	size_t size = ftell(file);
+	fseek(file, 0, SEEK_SET);
+	char* buffer = new char[size + 1];
+	fread(buffer, sizeof(char), size, file);
+	buffer[size] = '\0';
+	std::string source = buffer;
+	delete[] buffer;
+	fclose(file);
+	return source;
+}
+
+int ShaderProgram::compileShaderStandalone(GLenum t, std::string* source) {
+
+	int shaderId = 0;
+
+	shaderId = glCreateShader(t);
+
+
+	std::string src = source ? *source : loadSourceFromFile();
+
+	int compileResult = 0;
+	if (src.empty()) {
+		printf("ERROR: No source code provided for shader '%s'.\n", filePath.c_str());
+		return -1;
+	}
+
+	if (isEditorIntrinsic) {
+		const char* source_cstr = src.c_str();
+		glShaderSource(shaderId, 1, &source_cstr, nullptr);
+	}
+	else {
+		std::string shaderConcat = ShaderResource::getFullShaderCodeFromSource(&src, t);
+		const char* shaderConcat_cstr = shaderConcat.c_str();
+		glShaderSource(shaderId, 1, &shaderConcat_cstr, nullptr);
+	}
+	glCompileShader(shaderId);
+	glGetShaderiv(shaderId, GL_COMPILE_STATUS, &compileResult);
+	if (compileResult != GL_TRUE) {
+		int infoLogLength;
+		glGetShaderiv(shaderId, GL_INFO_LOG_LENGTH, &infoLogLength);
+		char* message = new char[infoLogLength];
+		glGetShaderInfoLog(shaderId, infoLogLength, &infoLogLength, message);
+		printf("ERROR: Failed to compile shader '%s': %s\n", filePath.c_str(), message);
+		delete[] message;
+		return -1;
+	}
+	return shaderId;
+}
+int ShaderProgram::createProgramStandalone() {
+
+	int shaderVertexId = compileShaderStandalone(GL_VERTEX_SHADER);
+	int shaderFragmentId = compileShaderStandalone(GL_FRAGMENT_SHADER);
+
+	glAttachShader(id, shaderVertexId);
+	glAttachShader(id, shaderFragmentId);
+
+	for (int i = 0; i < eMaterialTexture_MAX; ++i) {
+		glBindFragDataLocation(id, i, shaderOutputNames[i].c_str());
+	}
+	linkProgram();
+	glDeleteShader(shaderVertexId);
+	glDeleteShader(shaderFragmentId);
+	
+	return 0;
+}
 int ShaderProgram::createProgram(bool reloadShaders) {
 
 	if (id != 0) {
@@ -168,23 +427,29 @@ int ShaderProgram::createProgram(bool reloadShaders) {
 		id = 0;
 	}
 	id = glCreateProgram();
-
+	if (!isEditorIntrinsic) {
+		//If this is not an editor intrinsic, then we need to load the core shader sources first
+		createProgramStandalone();
+	}
+	else
+	{
 
 	std::vector<ShaderResource*> shaders;
 	for (Instance* child : children) {
 		if (child->type != InstanceType_ShaderResource) {
 			continue;
-		}	
+		}
 		shaders.push_back(dynamic_cast<ShaderResource*>(child));
 	}
 
 	for (ShaderResource* shader : shaders) {
+		shader->isEditorIntrinsic = isEditorIntrinsic;
 		if (reloadShaders) {
 			shader->loadFromFile(shader->filePath.c_str());
 		}
 		shader->compileShader();
 		attachShader(shader);
-	}	
+	}
 	for (int i = 0; i < eMaterialTexture_MAX; ++i) {
 		glBindFragDataLocation(id, i, shaderOutputNames[i].c_str());
 	}
@@ -193,7 +458,7 @@ int ShaderProgram::createProgram(bool reloadShaders) {
 		glDeleteShader(shader->id);
 		shader->id = 0;
 	}
-
+}
 	GLint numActiveAttribs = 0;
 	glGetProgramiv(id, GL_ACTIVE_ATTRIBUTES, &numActiveAttribs);
 
@@ -313,6 +578,7 @@ void ShaderProgram::setUniformSMat(std::string uniform, const float* fv, bool tr
 
 int ShaderProgram::bindTexture(std::string uniform, ImageResource* tex, int type) {
 	int textureSlot = -1;
+
 	if (U(uniform) == -1) return -1;
 	//printf("%s -%d\n", uniform.c_str(), U(uniform));
 	textureSlot = type;
@@ -369,21 +635,19 @@ Instance* ShaderResource::clone_this() {
 	s->compiled = false;
 	s->compileResult = 0;
 	s->filePath = filePath;
-	if (source != nullptr) {
-		size_t sourceLength = strlen(source);
-		s->source = new char[sourceLength + 1];
-		strcpy_s(s->source, sourceLength + 1, source);
+	if (!source.empty()) {
+		size_t sourceLength = source.length();
+		s->source = source;
 	}
 	else {
-		s->source = nullptr;
+		s->source = "";
 	}
 	return s;
 }
 
 ShaderResource::~ShaderResource() {
-	if (source != nullptr) {
-		delete[] source;
-		source = nullptr;
+	if (!source.empty()) {
+		source.clear();
 	}
 	if (id != 0) {
 		glDeleteShader(id);
@@ -398,9 +662,9 @@ int ShaderResource::saveInstanceToFile(FILE* file) {
 	offset += fwrite(filePath.data(), filePath.size() + 1, 1, file);
 	offset += fwrite(&compileResult, sizeof(int), 1, file);
 	offset += fwrite(&compiled, sizeof(bool), 1, file);
-	if (source != nullptr) {
-		size_t sourceLength = strlen(source);
-		offset += fwrite(source, sizeof(char), sourceLength + 1, file);
+	if (!source.empty()) {
+		size_t sourceLength = source.length();
+		offset += fwrite(source.data(), sizeof(char), sourceLength + 1, file);
 	}
 	else {
 		char emptySource = '\0';
@@ -422,17 +686,15 @@ int ShaderResource::loadInstanceFromFile(void* data, int off) {
 	o += sizeof(int);
 	memcpy(&compiled, offset(data, o), sizeof(bool));
 	o += sizeof(bool);
-	if (source != nullptr) {
-		delete[] source;
-		source = nullptr;
+	if (!source.empty()) {
+		source.clear();
 	}
 	size_t sourceLength = strlen((char*)offset(data, o));
 	if (sourceLength > 0) {
-		source = new char[sourceLength + 1];
-		strcpy_s(source, sourceLength + 1, (char*)offset(data, o));
+		source = std::string((char*)offset(data, o));
 	}
 	else {
-		source = nullptr;
+		source = "";
 	}
 	o += sourceLength + 1;
 	compiled = false;
@@ -491,8 +753,8 @@ int ShaderResource::getNumSaveBytes() {
 	size += filePath.size() + 1;
 	size += sizeof(int);
 	size += sizeof(bool);
-	if (source != nullptr) {
-		size += strlen(source) + 1;
+	if (!source.empty()) {
+		size += source.length() + 1;
 	}
 	else {
 		size += 1; // For the null terminator
