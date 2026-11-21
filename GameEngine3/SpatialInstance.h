@@ -3,6 +3,10 @@
 #include "Graphics/matrix.h"
 class SpatialInstance : public Instance
 {
+
+protected:
+	void updateTransformCache();
+	bool isCacheDirty();
 public:
 	SpatialInstance();
 
@@ -11,6 +15,14 @@ public:
 	vec3 rotation;
 	vec3 scale;
 
+	vec3 cachedPosition;
+	vec3 cachedRotation;
+	vec3 cachedScale;
+
+	mat4 cachedLocalTransform;
+
+
+	mat4 getRawTransform();
 	mat4 getLocalTransform();
 	mat4 getWorldTransform();
 

@@ -4,7 +4,7 @@
 std::set<int> Mesh::render_objects;
 vec3 Mesh::cameraPosition;
 
-std::vector<int> Mesh::meshDrawCallGroups[];
+std::vector<Mesh*> Mesh::meshDrawCallGroups[];
 
 const std::string Mesh::renderLayerNames[] = {
 	"None",
@@ -348,20 +348,20 @@ void Mesh::setMeshDrawCallGroups() {
 			bool materialTransparent = material->isTransparent || material->diffuseColor.W < 0.99f;
 			if (m->renderLayer == eRenderLayer_World) {
 				if (!materialTransparent && material->isLit) {
-					meshDrawCallGroups[eRenderGroup_WorldCore].push_back(id);
+					meshDrawCallGroups[eRenderGroup_WorldCore].push_back(m);
 				}
 				else if (!materialTransparent && !material->isLit) {
-					meshDrawCallGroups[eRenderGroup_WorldCustom].push_back(id);
+					meshDrawCallGroups[eRenderGroup_WorldCustom].push_back(m);
 				}
 				else if (materialTransparent) {
-					meshDrawCallGroups[eRenderGroup_WorldTransparent].push_back(id);
+					meshDrawCallGroups[eRenderGroup_WorldTransparent].push_back(m);
 				}
 			} else if (m->renderLayer == eRenderLayer_UI) {
 				if (!materialTransparent) {
-					meshDrawCallGroups[eRenderGroup_UI].push_back(id);
+					meshDrawCallGroups[eRenderGroup_UI].push_back(m);
 				}
 				else {
-					meshDrawCallGroups[eRenderGroup_UITransparent].push_back(id);
+					meshDrawCallGroups[eRenderGroup_UITransparent].push_back(m);
 				}
 			}
 		}
@@ -378,8 +378,7 @@ void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 	}
 
 	if (passNum == 0) {
-		for (int i : meshDrawCallGroups[eRenderGroup_WorldCore]) {
-			Mesh* m = (Mesh*)getInstanceById(i);
+		for (Mesh* m : meshDrawCallGroups[eRenderGroup_WorldCore]) {
 			if (!m->isEditorIntrinsic) {
 				m->render(camera);
 			}
@@ -388,16 +387,14 @@ void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 	if (passNum == 1) {
 		Mesh::cameraPosition = camera->position;
 
-		for (int i : meshDrawCallGroups[eRenderGroup_WorldCustom]) {
-			Mesh* m = (Mesh*)getInstanceById(i);
+		for (Mesh* m : meshDrawCallGroups[eRenderGroup_WorldCustom]) {
 			if (!m->isEditorIntrinsic) {
 				m->render(camera);
 			}
 		}
 
 		std::qsort(meshDrawCallGroups[eRenderGroup_WorldTransparent].data(), meshDrawCallGroups[eRenderGroup_WorldTransparent].size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
-		for (int i : meshDrawCallGroups[eRenderGroup_WorldTransparent]) {
-			Mesh* m = (Mesh*)getInstanceById(i);
+		for (Mesh* m : meshDrawCallGroups[eRenderGroup_WorldTransparent]) {
 			if (!m->isEditorIntrinsic) {
 				m->render(camera, true);
 			}
@@ -406,16 +403,14 @@ void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 
 	if (passNum == 2 && ui) {
 
-		for (int i : meshDrawCallGroups[eRenderGroup_UI]) {
-			Mesh* m = (Mesh*)getInstanceById(i);
+		for (Mesh* m: meshDrawCallGroups[eRenderGroup_UI]) {
 			if (!m->isEditorIntrinsic) {
 				m->render(ui, false, eRenderLayer_UI);
 			}
 		}
 		Mesh::cameraPosition = camera->position;
 		std::qsort(meshDrawCallGroups[eRenderGroup_UITransparent].data(), meshDrawCallGroups[eRenderGroup_UITransparent].size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
-		for (int i : meshDrawCallGroups[eRenderGroup_UITransparent]) {
-			Mesh* m = (Mesh*)getInstanceById(i);
+		for (Mesh* m : meshDrawCallGroups[eRenderGroup_UITransparent]) {
 			if (!m->isEditorIntrinsic) {
 				m->render(camera, true, eRenderLayer_UI);
 			}

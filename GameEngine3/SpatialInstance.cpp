@@ -5,17 +5,33 @@ SpatialInstance::SpatialInstance() : Instance() {
 	position = vec3(0, 0, 0);
 	rotation = vec3(0, 0, 0);
 	scale = vec3(1, 1, 1);
+
+	updateTransformCache();
 	type = InstanceType_Spatial;
 }
 
+void SpatialInstance::updateTransformCache() {
+	cachedPosition = position;
+	cachedRotation = rotation;
+	cachedScale = scale;
+	cachedLocalTransform = getRawTransform();
+}
+bool SpatialInstance::isCacheDirty() {
+	return !(cachedPosition == position && cachedRotation == rotation && cachedScale == scale);
+}
 Instance* SpatialInstance::clone_this() {
 	SpatialInstance* i = new SpatialInstance(*this);
 	return (SpatialInstance*)registerInstance(i, true);
 }
 
-mat4 SpatialInstance::getLocalTransform() {
-	mat4 translation = mat4::transform(position, scale, rotation);
+mat4 SpatialInstance::getRawTransform() {
 	return mat4::transform(position, scale, rotation);
+}
+mat4 SpatialInstance::getLocalTransform() {
+	if (isCacheDirty()) {
+		updateTransformCache();
+	}
+	return cachedLocalTransform;
 }
 
 mat4 SpatialInstance::getWorldTransform() {

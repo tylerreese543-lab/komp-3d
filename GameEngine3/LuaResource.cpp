@@ -29,7 +29,7 @@ sol::object LuaResource::InstanceToSolObj(sol::this_state ts, Instance* i) {
 	}
 	switch (i->type) {
 	case InstanceType_LuaResource:
-		return sol::make_object(ts, (LuaResource*)i);
+		return sol::make_object(ts, (LuaResource*)i); 
 	case InstanceType_Camera:
 		return sol::make_object(ts, (Camera*)i);
 	case InstanceType_Mesh:
@@ -709,20 +709,26 @@ LuaResource::~LuaResource() {
 
 }
 sol::object LuaResource::__luaIndex(Instance* self, sol::this_state ts, const std::string& key) {
-	if (lua[getInstanceNameFromType(self->type)][key].valid()) {
+
+	std::string name = getInstanceNameFromType(self->type);
+	if (lua[name][key].valid()) {
 		//printf("Found pre method %s\n", key.c_str());
-		return lua[getInstanceNameFromType(self->type)][key];
+		return lua[name][key];
 	}
 
+	Instance* child = self->getChildFromName(key);
 	//otherwise query children
 
-	if (self->getChildFromName(key) != nullptr) {
+	if (child) {
 		//printf("Found child %s\n", key.c_str());
-		return InstanceToSolObj(ts, self->getChildFromName(key));
+		return InstanceToSolObj(ts, child);
 	}
 	//if all else fails , return nil
 
+
+#ifdef _DEBUG
 	printf("LuaRuntimeError: Could not find key '%s'\n", key.c_str());
+#endif
 	return sol::make_object(ts, sol::nil);
 }
 void LuaResource::loadFromFile(std::string filepath) {
@@ -771,16 +777,17 @@ void LuaResource::loadScript() {
 		printf("Failed to execute script startup: %s\n", err.what());
 		return;
 	}
-
+	
+	//TODO: Remove hard-coded tick and replace with a script connection (from a new TimerService or similar)
 	has_tick = false;
 	sol::optional<sol::protected_function> optional_tick = env["Tick"];
 	if (optional_tick.has_value()) {
 		has_tick = true;
 		tick_function = optional_tick.value();
-		printf("Has tick \n");
+		//printf("Has tick \n");
 	}
 	else {
-		printf("No tick :(\n");
+		//printf("No tick :(\n");
 	}
 }
 

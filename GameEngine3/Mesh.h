@@ -112,7 +112,7 @@ protected:
 		eRenderGroup_UITransparent,
 		eRenderGroup_MAX
 	};
-	static std::vector<int> meshDrawCallGroups[eRenderGroup_MAX];
+	static std::vector<Mesh*> meshDrawCallGroups[eRenderGroup_MAX];
 public:
 	const static std::string renderLayerNames[eRenderLayer_MAX];
 	const static int renderLayerEnum[eRenderLayer_MAX];

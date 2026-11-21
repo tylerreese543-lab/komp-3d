@@ -20,6 +20,7 @@ int main() {
 	graphics->initializeWindow(800, 600, "Game Engine 3");
 	graphics->matchViewportToWindow = true;
 	graphics->initializeDeferredRendering();
+	graphics->limitFPS = false;
 	LuaResource::InitializeLua();
 
 	ShaderResource::LoadCoreShaderSources();
@@ -245,7 +246,7 @@ int main() {
 
 	while (graphics->shouldOpenWindow()) {
 
-		if ((glfwGetTime() - graphics->lastFrameTime) < (1.0 / (float)graphics->targetFPS)) continue;
+		if (((glfwGetTime() - graphics->lastFrameTime) < (1.0 / (float)graphics->targetFPS)) && !graphics->limitFPS) continue;
 		Scene::getCurrentScene()->PreRender();
 		ppQuadMaterial->setShader((ShaderProgram*)Instance::getInstanceById(Scene::getCurrentScene()->renderShader));
 		ppQuadMaterial->applyMaterialFramebuffer();

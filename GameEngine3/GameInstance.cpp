@@ -277,7 +277,6 @@ bool Instance::isRegistered(Instance* inst) {
 }
 
 Instance* Instance::getInstanceById(int ID) {
-	if (!isIdValid(ID)) return nullptr;
 	if (!isRegistered(world[ID])) return nullptr;
 	return world[ID];
 }

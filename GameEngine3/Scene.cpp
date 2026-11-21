@@ -46,7 +46,8 @@ void Scene::PreRender() {
 	g->currentFPS = 1.0 / g->deltaTime;
 	g->lastFrameTime = glfwGetTime();
 	g->gamepad_data.UpdateGamepads();
-	if (isStudio && !getInstanceById(currentCamera)) {
+	Camera* c = (Camera*)getInstanceById(currentCamera);
+	if (isStudio && !c) {
 		for (auto pair : Instance::world) {
 			Instance* child = pair.second;
 			if (!child) continue;
@@ -56,7 +57,7 @@ void Scene::PreRender() {
 			}
 		}	
 	}
-	Camera* c = (Camera*)getInstanceById(currentCamera);
+	c = (Camera*)getInstanceById(currentCamera);
 	if (!c) {
 		debug_log("Scene::PreRender: No valid camera found for scene '%s' (ID %d). Rendering skipped.\n", name.c_str(), getId());
 		return;
@@ -78,12 +79,11 @@ void Scene::RenderScene(int passNum) {
 		for (auto pair : Instance::world) {
 			Instance* child = pair.second;
 			if (!child) continue;
-			if (!child->isActive) continue;
-			if (child->type == InstanceType_Camera && isStudio && !child->omitFromHierarchyRender()) {
+			if (!child->isActive || child->omitFromHierarchyRender()) continue;
+			if (child->type == InstanceType_Camera) {
 				//printf("Rendering debug for camera '%s' (ID %d)\n", child->name.c_str(), child->getId());
 				((Camera*)child)->debugRender();
-			}
-			if (child->type == InstanceType_PointLight && isStudio && !child->omitFromHierarchyRender()) {
+			} else if (child->type == InstanceType_PointLight) {
 				//printf("Rendering debug for camera '%s' (ID %d)\n", child->name.c_str(), child->getId());
 				((Light*)child)->debugRender();
 			}
