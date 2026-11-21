@@ -103,6 +103,16 @@ protected:
 	static std::set<int> render_objects;
 	static int distanceQsortCompareFunction(const void* a, const void* b);
 	static vec3 cameraPosition;
+
+	enum {
+		eRenderGroup_WorldCore = 0,
+		eRenderGroup_WorldCustom,
+		eRenderGroup_WorldTransparent,
+		eRenderGroup_UI,
+		eRenderGroup_UITransparent,
+		eRenderGroup_MAX
+	};
+	static std::vector<int> meshDrawCallGroups[eRenderGroup_MAX];
 public:
 	const static std::string renderLayerNames[eRenderLayer_MAX];
 	const static int renderLayerEnum[eRenderLayer_MAX];
@@ -129,6 +139,9 @@ public:
 	void setRotation(vec3 rotation);
 	void setScale(vec3 scale);
 
+
+
+	static void setMeshDrawCallGroups();
 	static void renderAllMeshes(Camera* camera_world, Camera* camera_ui, int passNum);
 
 	virtual int destroy();

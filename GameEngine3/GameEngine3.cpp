@@ -62,6 +62,59 @@ int main() {
 	pp_shader->setParent(resources);
 	pp_shader->name = "PostProcessingShader";
 	scene->renderShader = pp_shader->getId();
+
+		Material* GizmoMaterialX = new Material();
+	GizmoMaterialX->setShader(nullptr);
+	GizmoMaterialX->diffuseColor = vec4(1, 0, 0, 0.5);
+	GizmoMaterialX->isEditorIntrinsic = true;
+
+	Material* GizmoMaterialY = new Material();
+	GizmoMaterialY->setShader(nullptr);
+	GizmoMaterialY->diffuseColor = vec4(0, 1, 0, 0.5);
+	GizmoMaterialY->isEditorIntrinsic = true;
+
+	Material* GizmoMaterialZ = new Material();
+	GizmoMaterialZ->setShader(nullptr);
+	GizmoMaterialZ->diffuseColor = vec4(0, 0, 1, 0.5);
+	GizmoMaterialZ->isEditorIntrinsic = true;
+	Geometry* cubeGeom = new Geometry();
+	cubeGeom->isEditorIntrinsic = true;
+	cubeGeom->name = "CubeGeom";
+	cubeGeom->loadFromFile("res://models/Cube.fbx");
+
+	Mesh* positionGizmoMesh = new Mesh();
+	positionGizmoMesh->isEditorIntrinsic = true;
+
+	Mesh* gizmoMeshTX = new Mesh();
+	gizmoMeshTX->isEditorIntrinsic = true;
+	gizmoMeshTX->name = "MeshTranslateX";
+	gizmoMeshTX->setParent(positionGizmoMesh);
+	gizmoMeshTX->position = vec3(5, 0, 0);
+	gizmoMeshTX->scale = vec3(3.0, 0.3, 0.3);
+	gizmoMeshTX->material = GizmoMaterialX->getId();
+	gizmoMeshTX->geometry = cubeGeom->getId();
+	Scene::translateInstance[eAxis_X - 1] = gizmoMeshTX->getId();
+
+	Mesh* gizmoMeshTY = new Mesh();
+	gizmoMeshTY->isEditorIntrinsic = true;
+	gizmoMeshTY->name = "MeshTranslateY";
+	gizmoMeshTY->setParent(positionGizmoMesh);
+	gizmoMeshTY->position = vec3(0, 5, 0);
+	gizmoMeshTY->scale = vec3(0.3, 3.0, 0.3);
+	gizmoMeshTY->material = GizmoMaterialY->getId();
+	gizmoMeshTY->geometry = cubeGeom->getId();
+	Scene::translateInstance[eAxis_Y - 1] = gizmoMeshTY->getId();
+
+	Mesh* gizmoMeshTZ = new Mesh();
+	gizmoMeshTZ->isEditorIntrinsic = true;
+	gizmoMeshTZ->name = "MeshTranslateZ";
+	gizmoMeshTZ->setParent(positionGizmoMesh);
+	gizmoMeshTZ->position = vec3(0, 0, 5);
+	gizmoMeshTZ->scale = vec3(0.3, 0.3, 3.0);
+	gizmoMeshTZ->material = GizmoMaterialZ->getId();
+	gizmoMeshTZ->geometry = cubeGeom->getId();
+	Scene::translateInstance[eAxis_Z - 1] = gizmoMeshTZ->getId();
+
 #endif
 
 	ShaderProgram* core_shader = new ShaderProgram("core://shader/core_vertex.glsl", "core://shader/core_fragment.glsl");
@@ -119,57 +172,6 @@ int main() {
 	This will allow for consistent references to these resources across scenes and saves. */
 
 
-	Material* GizmoMaterialX = new Material();
-	GizmoMaterialX->setShader(nullptr);
-	GizmoMaterialX->diffuseColor = vec4(1, 0, 0, 0.5);
-	GizmoMaterialX->isEditorIntrinsic = true;
-
-	Material* GizmoMaterialY = new Material();
-	GizmoMaterialY->setShader(nullptr);
-	GizmoMaterialY->diffuseColor = vec4(0, 1, 0, 0.5);
-	GizmoMaterialY->isEditorIntrinsic = true;
-
-	Material* GizmoMaterialZ = new Material();
-	GizmoMaterialZ->setShader(nullptr);
-	GizmoMaterialZ->diffuseColor = vec4(0, 0, 1, 0.5);
-	GizmoMaterialZ->isEditorIntrinsic = true;
-	Geometry* cubeGeom = new Geometry();
-	cubeGeom->isEditorIntrinsic = true;
-	cubeGeom->name = "CubeGeom";
-	cubeGeom->loadFromFile("res://models/Cube.fbx");
-
-	Mesh* positionGizmoMesh = new Mesh();
-	positionGizmoMesh->isEditorIntrinsic = true;
-
-	Mesh* gizmoMeshTX = new Mesh();
-	gizmoMeshTX->isEditorIntrinsic = true;
-	gizmoMeshTX->name = "MeshTranslateX";
-	gizmoMeshTX->setParent(positionGizmoMesh);
-	gizmoMeshTX->position = vec3(5, 0, 0);
-	gizmoMeshTX->scale = vec3(3.0, 0.3, 0.3);
-	gizmoMeshTX->material = GizmoMaterialX->getId();
-	gizmoMeshTX->geometry = cubeGeom->getId();
-	Scene::translateInstance[eAxis_X - 1] = gizmoMeshTX->getId();
-
-	Mesh* gizmoMeshTY = new Mesh();
-	gizmoMeshTY->isEditorIntrinsic = true;
-	gizmoMeshTY->name = "MeshTranslateY";
-	gizmoMeshTY->setParent(positionGizmoMesh);
-	gizmoMeshTY->position = vec3(0, 5, 0);
-	gizmoMeshTY->scale = vec3(0.3, 3.0, 0.3);
-	gizmoMeshTY->material = GizmoMaterialY->getId();
-	gizmoMeshTY->geometry = cubeGeom->getId();
-	Scene::translateInstance[eAxis_Y - 1] = gizmoMeshTY->getId();
-
-	Mesh* gizmoMeshTZ = new Mesh();
-	gizmoMeshTZ->isEditorIntrinsic = true;
-	gizmoMeshTZ->name = "MeshTranslateZ";
-	gizmoMeshTZ->setParent(positionGizmoMesh);
-	gizmoMeshTZ->position = vec3(0, 0, 5);
-	gizmoMeshTZ->scale = vec3(0.3, 0.3, 3.0);
-	gizmoMeshTZ->material = GizmoMaterialZ->getId();
-	gizmoMeshTZ->geometry = cubeGeom->getId();
-	Scene::translateInstance[eAxis_Z - 1] = gizmoMeshTZ->getId();
 
 	ImageResource* diffuse_FBOPortRender = new ImageResource(eMaterialTexture_Diffuse);
 	diffuse_FBOPortRender->name = "DiffuseLocation";
@@ -256,12 +258,12 @@ int main() {
 #ifdef _DEBUG
 		{
 			ImGui::Begin("Scene Hierarchy");
-			
+
 			EngineGUI::newInstanceSelected = false;
 			EngineGUI::isHierarchyFocused = ImGui::IsWindowFocused();
 			EngineGUI::updateSelectedInstanceHash();
 			EngineGUI::DrawHierarchyNode(scene->getCurrentScene());
-			
+
 			ImGui::End();
 		}
 #endif
@@ -286,7 +288,7 @@ int main() {
 			}
 			ImGui::End();
 		}
-					// Loop through all instances in your world map/vector
+		// Loop through all instances in your world map/vector
 
 		{
 			ImGui::Begin("Inspector");
@@ -308,7 +310,7 @@ int main() {
 		EngineGUI::DrawRightClickVoidContextMenuNode();
 		EngineGUI::DrawAddInstanceModalNode();
 #endif
-		ImGui::Render(); 
+		ImGui::Render();
 
 
 		for (auto i : Instance::world) {
@@ -318,7 +320,8 @@ int main() {
 
 				if (active) {
 					i.second->makeActive();
-				} else {
+				}
+				else {
 					i.second->makeInactive();
 				}
 			}
@@ -350,9 +353,9 @@ int main() {
 		Render quad again to FBO 0 with post-processing pass
 
 		*/
-		EngineGUI::calculateMouseRayDirection();
 		//printf("%s\n", std::string(EngineGUI::mouseRayDirection).c_str());
 
+		Mesh::setMeshDrawCallGroups();
 		Scene::getCurrentScene()->getCamera()->updateMatrices();
 		glBindVertexArray(0);
 		graphics->getFramebuffer(eFramebuffer_Lighting)->bind();
@@ -383,8 +386,12 @@ int main() {
 		renderQuad->material = ppQuadMaterial->getId();
 		renderQuad->render(Scene::getCurrentCamera(), false, eRenderLayer_UI);
 		Scene::getCurrentScene()->RenderScene(2);
-		EngineGUI::DrawTranslateGizmo();
-		EngineGUI::updateGizmoObject();
+
+		if (Scene::isStudio) {
+			EngineGUI::calculateMouseRayDirection();
+			EngineGUI::DrawTranslateGizmo();
+			EngineGUI::updateGizmoObject();
+		}
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		graphics->windowUpdate();
 	}

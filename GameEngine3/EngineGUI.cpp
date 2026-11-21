@@ -367,6 +367,7 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 
 		ImGui::Checkbox("Preserve Dimensions", &(m->preserveRotatedSize));
 		ImGui::Checkbox("Represent Parent", &(m->wrapAroundParentMesh));
+		ImGui::Checkbox("Always Update", &(m->alwaysUpdate));
 	}
 	if (inst->type == Instance::InstanceType_Material) {
 		Material* m = (Material*)inst;

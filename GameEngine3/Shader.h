@@ -93,6 +93,8 @@ public:
 	ShaderProgram();
 	ShaderProgram(std::string vs, std::string fs);
 
+
+	virtual void update(float deltaTime, bool isStudio);
 	virtual int saveInstanceToFile(FILE* file);
 	virtual int loadInstanceFromFile(void* data, int offset = 0);
 

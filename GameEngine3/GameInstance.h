@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <set>
 
 #define GAME_VERSION_MAJOR 0
@@ -27,7 +28,7 @@ public:
 	static bool isRegistered(Instance* instance);
 	static bool isIdValid(int ID);
 	static Instance* getInstanceById(int ID);
-	static std::map<int, Instance*> world;
+	static std::unordered_map<int, Instance*> world;
 	static std::set<int> activeWorld;
 	enum {
 		InstanceType_Undefined = 0,

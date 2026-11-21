@@ -6,6 +6,7 @@
 #include <cctype>
 
 
+#include "Light.h"
 const std::string ShaderResource::coreShaderPortNames[2] = {
 	"vertex_main",
 	"fragment_main"
@@ -48,7 +49,12 @@ void ShaderResource::LoadCoreShaderSources() {
 	}
 }
 
-
+void ShaderProgram::update(float deltaTime, bool isStudio) {
+	setUniform3f("l_AmbientLight", Light::ambient);
+	setUniform1i("l_NumPointLights", Light::numPointLights);
+	setUniform1i("l_NumDirectionalLights", Light::numDirectionalLights);
+	setUniform1f(shaderUniformNames[eSUniform_CurrentTime], Graphics::getInstance()->lastFrameTime);
+}
 std::string ShaderResource::getFullShaderCodeFromSource(std::string* source, GLenum t) {
 	std::string sourceConcat[3] = {"", "", ""};
 	sourceConcat[1] = getShaderCodeFromSource(source, t);

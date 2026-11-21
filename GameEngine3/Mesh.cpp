@@ -4,6 +4,7 @@
 std::set<int> Mesh::render_objects;
 vec3 Mesh::cameraPosition;
 
+std::vector<int> Mesh::meshDrawCallGroups[];
 
 const std::string Mesh::renderLayerNames[] = {
 	"None",
@@ -198,16 +199,13 @@ void Mesh::render(Camera* camera, bool transparent, int renderLayerTarget) {
 	else {
 		setupRenderSettings(transparent, cull);
 	}
-	program->setUniform3f("l_AmbientLight", Light::ambient);
-	program->setUniform1i("l_NumPointLights", Light::numPointLights);
-	program->setUniform1i("l_NumDirectionalLights", Light::numDirectionalLights);
+
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], getWorldTransform(), GL_TRUE, 4);
 	if (!isEditorIntrinsic || camera) {
 		program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->getWorldPosition());
 		program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraLookMatrix], camera->look, GL_TRUE, 3);
 		program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraProjectionMatrix], camera->projection, GL_TRUE, 4);
 	}
-	program->setUniform1f(program->shaderUniformNames[eSUniform_CurrentTime], Graphics::getInstance()->lastFrameTime);
 	g->render();
 	
 }
@@ -334,50 +332,72 @@ int Mesh::distanceQsortCompareFunction(const void* a, const void* b) {
 
 
 }
-void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
-	if (!camera)  {
-		debug_log("No camera provided for rendering meshes. Aborting render.\n");
-		return;
+
+void Mesh::setMeshDrawCallGroups() {
+
+	//Optimization; pre-gather the draw calls before rendering so we dont check each for multiple render passes.
+	for (int i = 0; i < eRenderGroup_MAX; ++i) {
+		meshDrawCallGroups[i].clear();
 	}
-	std::vector<Mesh*> transparent_objects; // To be sorted by distance
-	std::set<Mesh*> ui_objects;
-	std::set<Mesh*>unlit_objects;
 	for (int id : render_objects) {
-		//debug_log("Rendering mesh '%s' (ID: %d) with geometry ID: %d and material ID: %d\n", m->name.c_str(), m->instanceId, m->geometry, m->material);
 		Mesh* m = (Mesh*)getInstanceById(id);
 		if (!m) continue;
 		if (!isInstanceOf(m->type, InstanceType_Mesh)) continue;
 		Material* material = (Material*)getInstanceById(m->material);
 		if (material && !m->isEditorIntrinsic) {
 			bool materialTransparent = material->isTransparent || material->diffuseColor.W < 0.99f;
-			if (m->renderLayer != eRenderLayer_World) {
-				if (passNum == 2 && m->renderLayer == eRenderLayer_UI && ui) {
-					if (materialTransparent) {
-						transparent_objects.push_back(m);
-					}
-					else ui_objects.insert(m);
+			if (m->renderLayer == eRenderLayer_World) {
+				if (!materialTransparent && material->isLit) {
+					meshDrawCallGroups[eRenderGroup_WorldCore].push_back(id);
 				}
-				continue; 
-			}
-			//Pass 0 - ONLY render non-transparent and lit objects
-			if (passNum == 0 && !materialTransparent && material->isLit) {
-				m->render(camera);
-			}
-			else if (passNum == 1 && (materialTransparent || !material->isLit)) {
-				if (materialTransparent) {
-					transparent_objects.push_back(m);
+				else if (!materialTransparent && !material->isLit) {
+					meshDrawCallGroups[eRenderGroup_WorldCustom].push_back(id);
+				}
+				else if (materialTransparent) {
+					meshDrawCallGroups[eRenderGroup_WorldTransparent].push_back(id);
+				}
+			} else if (m->renderLayer == eRenderLayer_UI) {
+				if (!materialTransparent) {
+					meshDrawCallGroups[eRenderGroup_UI].push_back(id);
 				}
 				else {
-					m->render(camera);
+					meshDrawCallGroups[eRenderGroup_UITransparent].push_back(id);
 				}
+			}
+		}
+	}
+
+
+
+
+}
+void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
+	if (!camera)  {
+		debug_log("No camera provided for rendering meshes. Aborting render.\n");
+		return;
+	}
+
+	if (passNum == 0) {
+		for (int i : meshDrawCallGroups[eRenderGroup_WorldCore]) {
+			Mesh* m = (Mesh*)getInstanceById(i);
+			if (!m->isEditorIntrinsic) {
+				m->render(camera);
 			}
 		}
 	}
 	if (passNum == 1) {
 		Mesh::cameraPosition = camera->position;
-		std::qsort(transparent_objects.data(), transparent_objects.size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
-		for (Mesh* m : transparent_objects) {
-			
+
+		for (int i : meshDrawCallGroups[eRenderGroup_WorldCustom]) {
+			Mesh* m = (Mesh*)getInstanceById(i);
+			if (!m->isEditorIntrinsic) {
+				m->render(camera);
+			}
+		}
+
+		std::qsort(meshDrawCallGroups[eRenderGroup_WorldTransparent].data(), meshDrawCallGroups[eRenderGroup_WorldTransparent].size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
+		for (int i : meshDrawCallGroups[eRenderGroup_WorldTransparent]) {
+			Mesh* m = (Mesh*)getInstanceById(i);
 			if (!m->isEditorIntrinsic) {
 				m->render(camera, true);
 			}
@@ -386,16 +406,18 @@ void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 
 	if (passNum == 2 && ui) {
 
-		for (Mesh* m : ui_objects) {
-
+		for (int i : meshDrawCallGroups[eRenderGroup_UI]) {
+			Mesh* m = (Mesh*)getInstanceById(i);
+			if (!m->isEditorIntrinsic) {
 				m->render(ui, false, eRenderLayer_UI);
+			}
 		}
 		Mesh::cameraPosition = camera->position;
-		std::qsort(transparent_objects.data(), transparent_objects.size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
-		for (Mesh* m : transparent_objects) {
-	
+		std::qsort(meshDrawCallGroups[eRenderGroup_UITransparent].data(), meshDrawCallGroups[eRenderGroup_UITransparent].size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
+		for (int i : meshDrawCallGroups[eRenderGroup_UITransparent]) {
+			Mesh* m = (Mesh*)getInstanceById(i);
 			if (!m->isEditorIntrinsic) {
-				m->render(ui, true, eRenderLayer_UI);
+				m->render(camera, true, eRenderLayer_UI);
 			}
 		}
 	}

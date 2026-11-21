@@ -1,7 +1,7 @@
 #include "GameInstance.h"
 
 int Instance::currentinstanceID = 0;
-std::map<int, Instance*> Instance::world;
+std::unordered_map<int, Instance*> Instance::world;
 std::set<Instance*> Instance::destroyQueue;
 std::set<int> Instance::activeWorld;
 std::map<unsigned int, unsigned int> Instance::instanceHierarchyMap;
