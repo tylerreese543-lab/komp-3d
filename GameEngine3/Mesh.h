@@ -112,7 +112,9 @@ protected:
 		eRenderGroup_UITransparent,
 		eRenderGroup_MAX
 	};
-	static std::vector<Mesh*> meshDrawCallGroups[eRenderGroup_MAX];
+	static std::unordered_map<int, std::vector<Mesh*>> meshDrawCallGroups[eRenderGroup_MAX];
+
+	static void sortMeshesByDistance(int drawCallGroup, vec3 cameraPos);
 public:
 	const static std::string renderLayerNames[eRenderLayer_MAX];
 	const static int renderLayerEnum[eRenderLayer_MAX];

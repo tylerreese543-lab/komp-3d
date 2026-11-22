@@ -8,6 +8,8 @@
 #include "Graphics/GraphicsWrapper.h"
 #include "TextureResource.h"
 #include "Resource.h"
+
+#include "Camera.h"
 class ShaderResource : public Resource {
 public:
 
@@ -72,6 +74,8 @@ public:
 	int createProgram(bool reloadShaders = false);
 	int useProgram();
 
+
+	void setCameraUniforms(Camera* camera);
 	void setDefaultVertexAttribute(int index, std::string name);
 	void setDefaultShaderUniform(int index, std::string name);
 	void setDefaultMaterialTexture(int index, std::string name);

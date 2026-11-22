@@ -50,6 +50,8 @@ void ShaderResource::LoadCoreShaderSources() {
 }
 
 void ShaderProgram::update(float deltaTime, bool isStudio) {
+
+	useProgram();
 	setUniform3f("l_AmbientLight", Light::ambient);
 	setUniform1i("l_NumPointLights", Light::numPointLights);
 	setUniform1i("l_NumDirectionalLights", Light::numDirectionalLights);
@@ -582,6 +584,12 @@ void ShaderProgram::setUniformSMat(std::string uniform, const float* fv, bool tr
 	}
 }
 
+void ShaderProgram::setCameraUniforms(Camera* camera) {
+	if (!camera) return;
+	setUniform3f(shaderUniformNames[eSUniform_CameraPosition], camera->getWorldPosition());
+	setUniformSMat(shaderUniformNames[eSUniform_CameraLookMatrix], camera->look, GL_TRUE, 3);
+	setUniformSMat(shaderUniformNames[eSUniform_CameraProjectionMatrix], camera->projection, GL_TRUE, 4);
+}
 int ShaderProgram::bindTexture(std::string uniform, ImageResource* tex, int type) {
 	int textureSlot = -1;
 

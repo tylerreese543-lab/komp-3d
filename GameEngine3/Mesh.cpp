@@ -4,7 +4,7 @@
 std::set<int> Mesh::render_objects;
 vec3 Mesh::cameraPosition;
 
-std::vector<Mesh*> Mesh::meshDrawCallGroups[];
+std::unordered_map<int, std::vector<Mesh*>> Mesh::meshDrawCallGroups[];
 
 const std::string Mesh::renderLayerNames[] = {
 	"None",
@@ -182,6 +182,8 @@ void Mesh::render(Camera* camera, bool transparent, int renderLayerTarget) {
 	if (prepareMaterial(&program) != 0) {
 		return;
 	}
+
+	
 	Geometry* g = (Geometry*)getInstanceById(geometry);
 
 		if (!isInstanceOf(g->type, InstanceType_Geometry)) return;
@@ -195,17 +197,14 @@ void Mesh::render(Camera* camera, bool transparent, int renderLayerTarget) {
 		//Do not write me do depth if I am the render quad!
 		glDepthMask(GL_FALSE);
 		glDisable(GL_DEPTH_TEST);
+
+		if (camera) program->setCameraUniforms(camera);
 	}
 	else {
 		setupRenderSettings(transparent, cull);
 	}
 
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], getWorldTransform(), GL_TRUE, 4);
-	if (!isEditorIntrinsic || camera) {
-		program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->getWorldPosition());
-		program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraLookMatrix], camera->look, GL_TRUE, 3);
-		program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraProjectionMatrix], camera->projection, GL_TRUE, 4);
-	}
 	g->render();
 	
 }
@@ -348,20 +347,20 @@ void Mesh::setMeshDrawCallGroups() {
 			bool materialTransparent = material->isTransparent || material->diffuseColor.W < 0.99f;
 			if (m->renderLayer == eRenderLayer_World) {
 				if (!materialTransparent && material->isLit) {
-					meshDrawCallGroups[eRenderGroup_WorldCore].push_back(m);
+					meshDrawCallGroups[eRenderGroup_WorldCore][material->getId()].push_back(m);
 				}
 				else if (!materialTransparent && !material->isLit) {
-					meshDrawCallGroups[eRenderGroup_WorldCustom].push_back(m);
+					meshDrawCallGroups[eRenderGroup_WorldCustom][material->getId()].push_back(m);
 				}
 				else if (materialTransparent) {
-					meshDrawCallGroups[eRenderGroup_WorldTransparent].push_back(m);
+					meshDrawCallGroups[eRenderGroup_WorldTransparent][material->getId()].push_back(m);
 				}
 			} else if (m->renderLayer == eRenderLayer_UI) {
 				if (!materialTransparent) {
-					meshDrawCallGroups[eRenderGroup_UI].push_back(m);
+					meshDrawCallGroups[eRenderGroup_UI][material->getId()].push_back(m);
 				}
 				else {
-					meshDrawCallGroups[eRenderGroup_UITransparent].push_back(m);
+					meshDrawCallGroups[eRenderGroup_UITransparent][material->getId()].push_back(m);
 				}
 			}
 		}
@@ -371,6 +370,13 @@ void Mesh::setMeshDrawCallGroups() {
 
 
 }
+
+void Mesh::sortMeshesByDistance(int drawCallGroup, vec3 camera) {
+	Mesh::cameraPosition = camera;
+	for (auto pair : meshDrawCallGroups[drawCallGroup]) {
+		std::qsort(pair.second.data(), pair.second.size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
+	}
+}
 void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 	if (!camera)  {
 		debug_log("No camera provided for rendering meshes. Aborting render.\n");
@@ -378,41 +384,64 @@ void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 	}
 
 	if (passNum == 0) {
-		for (Mesh* m : meshDrawCallGroups[eRenderGroup_WorldCore]) {
-			if (!m->isEditorIntrinsic) {
-				m->render(camera);
+		for (auto pair : meshDrawCallGroups[eRenderGroup_WorldCore]) {
+			Material* mat = (Material*)getInstanceById(pair.first);
+			
+			mat->applyMaterial();
+			mat->getShader()->setCameraUniforms(camera);
+
+			for (Mesh* m : pair.second) {
+					m->render(camera);
 			}
 		}
 	}
 	if (passNum == 1) {
 		Mesh::cameraPosition = camera->position;
 
-		for (Mesh* m : meshDrawCallGroups[eRenderGroup_WorldCustom]) {
-			if (!m->isEditorIntrinsic) {
-				m->render(camera);
+		for (auto pair : meshDrawCallGroups[eRenderGroup_WorldCustom]) {
+			Material* mat = (Material*)getInstanceById(pair.first);
+			
+			mat->applyMaterial();
+			mat->getShader()->setCameraUniforms(camera);
+
+			for (Mesh* m : pair.second) {
+					m->render(camera);
 			}
 		}
 
-		std::qsort(meshDrawCallGroups[eRenderGroup_WorldTransparent].data(), meshDrawCallGroups[eRenderGroup_WorldTransparent].size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
-		for (Mesh* m : meshDrawCallGroups[eRenderGroup_WorldTransparent]) {
-			if (!m->isEditorIntrinsic) {
-				m->render(camera, true);
+		sortMeshesByDistance(eRenderGroup_WorldTransparent, camera->position);
+		for (auto pair : meshDrawCallGroups[eRenderGroup_WorldTransparent]) {
+			Material* mat = (Material*)getInstanceById(pair.first);
+			
+			mat->applyMaterial();
+			mat->getShader()->setCameraUniforms(camera);
+
+			for (Mesh* m : pair.second) {
+					m->render(camera, true);
 			}
 		}
 	}
 
 	if (passNum == 2 && ui) {
-
-		for (Mesh* m: meshDrawCallGroups[eRenderGroup_UI]) {
-			if (!m->isEditorIntrinsic) {
-				m->render(ui, false, eRenderLayer_UI);
+		sortMeshesByDistance(eRenderGroup_UITransparent, vec3(0, 0, 0)); //UI camera has no real position, so just sort by origin
+		for (auto pair : meshDrawCallGroups[eRenderGroup_UI]) {
+			Material* mat = (Material*)getInstanceById(pair.first);
+			
+			mat->applyMaterial();
+			mat->getShader()->setCameraUniforms(ui);
+			
+			for (Mesh* m : pair.second) {
+					m->render(ui, false, eRenderLayer_UI);
 			}
 		}
-		Mesh::cameraPosition = camera->position;
-		std::qsort(meshDrawCallGroups[eRenderGroup_UITransparent].data(), meshDrawCallGroups[eRenderGroup_UITransparent].size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
-		for (Mesh* m : meshDrawCallGroups[eRenderGroup_UITransparent]) {
-			if (!m->isEditorIntrinsic) {
-				m->render(camera, true, eRenderLayer_UI);
+		for (auto pair : meshDrawCallGroups[eRenderGroup_UITransparent]) {
+			Material* mat = (Material*)getInstanceById(pair.first);
+			
+			mat->applyMaterial();
+			mat->getShader()->setCameraUniforms(ui);
+
+			for (Mesh* m : pair.second) {
+					m->render(ui, true, eRenderLayer_UI);
 			}
 		}
 	}
@@ -823,19 +852,16 @@ int Mesh::prepareMaterial(ShaderProgram** shaderOut) {
 		debug_log("No valid shader or material for '%s'. Aborting render.\n", name.c_str());
 		return -1;
 	}
-	if (!isInstanceOf(m->type, InstanceType_Material) && !isInstanceOf(m->type, InstanceType_ShaderProgram)) {
+	if (!isInstanceOf(m->type, InstanceType_Material)) {
 		debug_log("Instance referenced as material/shader is not valid. Aborting render (type = %d).\n", m->type);
 		return -1;
 	}
 	ShaderProgram* program = nullptr;
-	if (isInstanceOf(m->type, InstanceType_ShaderProgram)) {
-		program = (ShaderProgram*)m;
-		program->useProgram();
-	}
-	else if (isInstanceOf(m->type, InstanceType_Material)) {
+	if (isInstanceOf(m->type, InstanceType_Material)) {
 		Material* mat = (Material*)m;
 		program = mat->getShader();
-		mat->applyMaterial();
+
+		if (isEditorIntrinsic) mat->applyMaterial();
 	}
 
 	*shaderOut = program;
