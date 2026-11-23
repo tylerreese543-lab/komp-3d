@@ -48,5 +48,7 @@ public:
 	virtual int getNumSaveBytes();
 
 	virtual void finalizeLoad(std::map<int, int>* conversionMap);
+
+	bool isTransparentMaterial();
 };
 

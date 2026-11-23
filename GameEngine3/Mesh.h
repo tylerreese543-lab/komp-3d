@@ -104,15 +104,19 @@ protected:
 	static int distanceQsortCompareFunction(const void* a, const void* b);
 	static vec3 cameraPosition;
 
-	enum {
-		eRenderGroup_WorldCore = 0,
-		eRenderGroup_WorldCustom,
-		eRenderGroup_WorldTransparent,
-		eRenderGroup_UI,
-		eRenderGroup_UITransparent,
+	enum DrawGroup {
+		eRenderGroup_Core = 0,
+		eRenderGroup_Custom,
 		eRenderGroup_MAX
 	};
+
+	enum TransparentGroup {
+		eRenderTransparentGroup_Core = 0,
+		eRenderTransparentGroup_UI,
+		eRenderTransparentGroup_MAX
+	};
 	static std::unordered_map<int, std::vector<Mesh*>> meshDrawCallGroups[eRenderGroup_MAX];
+	static std::vector<Mesh*> meshDrawCallGroupsTransparent[eRenderTransparentGroup_MAX];
 
 	static void sortMeshesByDistance(int drawCallGroup, vec3 cameraPos);
 public:
@@ -126,7 +130,7 @@ public:
 	int renderLayer;
 	bool cull;
 
-	//Force the VAO to be regenerated due to shader change/resrt
+	//Force the VAO to be regenerated due to shader change/reset
 	bool VAODirty;
 
 	bool isFramebuffer;
@@ -135,7 +139,7 @@ public:
 
 	Mesh();
 
-	virtual int prepareMaterial(ShaderProgram** shader_out);
+	virtual int prepareMaterial(ShaderProgram** shader_out, Camera* camera = nullptr);
 
 	void setPosition(vec3 position);
 	void setRotation(vec3 rotation);

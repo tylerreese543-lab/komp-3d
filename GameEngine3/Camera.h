@@ -7,6 +7,7 @@ class Camera : public SpatialInstance
 public:
 
 	mat4 projection;
+	mat3 view;
 	mat3 look;
 	//Essentially the 2D direction of the camera, ignoring the Y axis. This is used for movement and other calculations.
 	mat3 moveDirection2D;

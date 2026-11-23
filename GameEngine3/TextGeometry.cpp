@@ -255,7 +255,7 @@ void TextGeometry::render(Camera* camera, bool transparent, int renderLayerTarge
 	setupRenderSettings(transparent, cull);
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], getWorldTransform(), GL_TRUE, 4);
 	program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->getWorldPosition());
-	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraLookMatrix], camera->look, GL_TRUE, 3);
+	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraLookMatrix], camera->view, GL_TRUE, 3);
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraProjectionMatrix], camera->projection, GL_TRUE, 4);
 	program->setUniform1f(program->shaderUniformNames[eSUniform_CurrentTime], Graphics::getInstance()->lastFrameTime);
 

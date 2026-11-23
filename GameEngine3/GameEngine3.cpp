@@ -246,7 +246,7 @@ int main() {
 
 	while (graphics->shouldOpenWindow()) {
 
-		if (((glfwGetTime() - graphics->lastFrameTime) < (1.0 / (float)graphics->targetFPS)) && !graphics->limitFPS) continue;
+		if (((glfwGetTime() - graphics->lastFrameTime) < (1.0 / (float)graphics->targetFPS)) && graphics->limitFPS) continue;
 		Scene::getCurrentScene()->PreRender();
 		ppQuadMaterial->setShader((ShaderProgram*)Instance::getInstanceById(Scene::getCurrentScene()->renderShader));
 		ppQuadMaterial->applyMaterialFramebuffer();
@@ -377,6 +377,7 @@ int main() {
 		glStencilMask(0x00);
 		glStencilFunc(GL_EQUAL, 1, 0xFF);
 		glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+
 		renderQuad->render(Scene::getCurrentCamera(), false, eRenderLayer_UI);
 		glStencilMask(0xFF);
 		glDisable(GL_STENCIL_TEST);

@@ -296,8 +296,11 @@ struct mat3 {
 	static mat3 yxz(float x, float y, float z) {
 		return zrot(z) * xrot(x) * yrot(y);
 	}
+	static mat3 zxy(float x, float y, float z) {
+		return yrot(y) * xrot(x) * zrot(z);
+	}
 	static mat3 xyz(float x, float y, float z) {
-		return zrot(z) * xrot(y) * yrot(x);
+		return zrot(z) * yrot(y) * xrot(x);
 	}
 	inline mat3 operator* (const mat3& right) const {
 		mat3 return_matrix;
@@ -311,9 +314,9 @@ struct mat3 {
 	inline vec3 operator* (const vec3& vec) const {
 		vec3 returnv3;
 		//std::cout << "Multiplying vec3 by mat3\n";
-		returnv3.X = vec.X * m[0][0] + vec.Y * m[1][0] + vec.Z * m[2][0];
-		returnv3.Y = vec.X * m[0][1] + vec.Y * m[1][1] + vec.Z * m[2][1];
-		returnv3.Z = vec.X * m[0][2] + vec.Y * m[1][2] + vec.Z * m[2][2];
+		returnv3.X = vec.X * m[0][0] + vec.Y * m[0][1] + vec.Z * m[0][2];
+		returnv3.Y = vec.X * m[1][0] + vec.Y * m[1][1] + vec.Z * m[1][2];
+		returnv3.Z = vec.X * m[2][0] + vec.Y * m[2][1] + vec.Z * m[2][2];
 		return returnv3;
 	}
 	

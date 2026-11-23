@@ -53,8 +53,9 @@ void Camera::updateMatrices() {
 	}
 
 	vec3 rotation = getWorldRotation();
-	look = mat3::yxz(-rotation.X, -rotation.Y, -rotation.Z);
-	moveDirection2D = mat3::yrot(-rotation.Y);
+	view = mat3::yxz(-rotation.X, -rotation.Y, -rotation.Z);
+	look = mat3::zxy(rotation.X, rotation.Y, rotation.Z);
+	moveDirection2D = mat3::yrot(rotation.Y);
 }
 
 float Camera::fovGL() {
@@ -171,7 +172,7 @@ void Camera::debugRender() {
 	mat4 transform = getWorldTransform();
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], transform, GL_TRUE, 4);
 	program->setUniform3f(program->shaderUniformNames[eSUniform_CameraPosition], camera->getWorldPosition());
-	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraLookMatrix], camera->look, GL_TRUE, 3);
+	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraLookMatrix], camera->view, GL_TRUE, 3);
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_CameraProjectionMatrix], camera->projection, GL_TRUE, 4);
 	program->setUniform1f(program->shaderUniformNames[eSUniform_CurrentTime], Graphics::getInstance()->lastFrameTime);
 	program->setUniform3f(program->shaderUniformNames[eSUniform_Material_DiffuseColor], Graphics::debugDefaultColor);

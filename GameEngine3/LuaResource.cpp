@@ -179,7 +179,7 @@ void LuaResource::InitializeLua() {
     matrix3_table["RotateX"]   = &mat3::xrot;
     matrix3_table["RotateZ"]   = &mat3::zrot;
     matrix3_table["RotateYXZ"] = &mat3::yxz;
-
+	matrix3_table["RotateXYZ"] = &mat3::xyz;
 	lua.new_usertype<vec3>("Vector3",
 		// Allow creating vectors via: Vector3.new() or Vector3.new(x, y, z)
 		sol::constructors<vec3(), vec3(float, float, float), vec3(float)>(),

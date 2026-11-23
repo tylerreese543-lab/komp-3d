@@ -587,7 +587,7 @@ void ShaderProgram::setUniformSMat(std::string uniform, const float* fv, bool tr
 void ShaderProgram::setCameraUniforms(Camera* camera) {
 	if (!camera) return;
 	setUniform3f(shaderUniformNames[eSUniform_CameraPosition], camera->getWorldPosition());
-	setUniformSMat(shaderUniformNames[eSUniform_CameraLookMatrix], camera->look, GL_TRUE, 3);
+	setUniformSMat(shaderUniformNames[eSUniform_CameraLookMatrix], camera->view, GL_TRUE, 3);
 	setUniformSMat(shaderUniformNames[eSUniform_CameraProjectionMatrix], camera->projection, GL_TRUE, 4);
 }
 int ShaderProgram::bindTexture(std::string uniform, ImageResource* tex, int type) {

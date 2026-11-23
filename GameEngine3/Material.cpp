@@ -41,6 +41,9 @@ void Material::SetTextureUseFlags(bool useDiffuse, bool useAmbientOcclusion, boo
 	textureUseFlags[eMaterialTexture_Roughness] = false;
 }
 
+bool Material::isTransparentMaterial() {
+	return isTransparent || diffuseColor.W < 0.99f;
+}
 //Searches through all of it's children for viable textures.
 void Material::autoPrepare(bool autoFlags) {
 	for (int i = eMaterialTexture_Diffuse; i < eMaterialTexture_MAX; ++i) {

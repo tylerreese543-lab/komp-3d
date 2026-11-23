@@ -5,6 +5,7 @@ std::set<int> Mesh::render_objects;
 vec3 Mesh::cameraPosition;
 
 std::unordered_map<int, std::vector<Mesh*>> Mesh::meshDrawCallGroups[];
+std::vector<Mesh*> Mesh::meshDrawCallGroupsTransparent[];
 
 const std::string Mesh::renderLayerNames[] = {
 	"None",
@@ -179,7 +180,7 @@ void Mesh::render(Camera* camera, bool transparent, int renderLayerTarget) {
 		return;
 	}
 	ShaderProgram* program = nullptr;
-	if (prepareMaterial(&program) != 0) {
+	if (prepareMaterial(&program, camera) != 0) {
 		return;
 	}
 
@@ -202,6 +203,7 @@ void Mesh::render(Camera* camera, bool transparent, int renderLayerTarget) {
 	}
 	else {
 		setupRenderSettings(transparent, cull);
+
 	}
 
 	program->setUniformSMat(program->shaderUniformNames[eSUniform_ModelTransformMatrix], getWorldTransform(), GL_TRUE, 4);
@@ -322,8 +324,8 @@ int Mesh::distanceQsortCompareFunction(const void* a, const void* b) {
 	Mesh* MeshA = *(Mesh**)a;
 	Mesh* MeshB = *(Mesh**)b;
 
-	float distanceA = (Mesh::cameraPosition - MeshA->position).gmag();
-	float distanceB = (Mesh::cameraPosition - MeshB->position).gmag();
+	float distanceA = (Mesh::cameraPosition - MeshA->getWorldPosition()).gmag();
+	float distanceB = (Mesh::cameraPosition - MeshB->getWorldPosition()).gmag();
 
 	if (distanceA > distanceB) return -1;
 	if (distanceA < distanceB) return 1;
@@ -335,8 +337,15 @@ int Mesh::distanceQsortCompareFunction(const void* a, const void* b) {
 void Mesh::setMeshDrawCallGroups() {
 
 	//Optimization; pre-gather the draw calls before rendering so we dont check each for multiple render passes.
+
+	/*
+	TODO: remove material grouping for transparent objects (a closer object may be occluded if their material is iterated later than a further object)
+
+	Reserve material grouping for opaque objects only, and leave transparent objects to be sorted in a single vector;
+	*/
 	for (int i = 0; i < eRenderGroup_MAX; ++i) {
 		meshDrawCallGroups[i].clear();
+		meshDrawCallGroups[i].reserve(render_objects.size());
 	}
 	for (int id : render_objects) {
 		Mesh* m = (Mesh*)getInstanceById(id);
@@ -344,24 +353,19 @@ void Mesh::setMeshDrawCallGroups() {
 		if (!isInstanceOf(m->type, InstanceType_Mesh)) continue;
 		Material* material = (Material*)getInstanceById(m->material);
 		if (material && !m->isEditorIntrinsic) {
-			bool materialTransparent = material->isTransparent || material->diffuseColor.W < 0.99f;
+			bool materialTransparent = material->isTransparentMaterial();
 			if (m->renderLayer == eRenderLayer_World) {
 				if (!materialTransparent && material->isLit) {
-					meshDrawCallGroups[eRenderGroup_WorldCore][material->getId()].push_back(m);
+					meshDrawCallGroups[eRenderGroup_Core][material->getId()].push_back(m);
 				}
 				else if (!materialTransparent && !material->isLit) {
-					meshDrawCallGroups[eRenderGroup_WorldCustom][material->getId()].push_back(m);
+					meshDrawCallGroups[eRenderGroup_Custom][material->getId()].push_back(m);
 				}
 				else if (materialTransparent) {
-					meshDrawCallGroups[eRenderGroup_WorldTransparent][material->getId()].push_back(m);
+					meshDrawCallGroupsTransparent[eRenderTransparentGroup_Core].push_back(m);
 				}
 			} else if (m->renderLayer == eRenderLayer_UI) {
-				if (!materialTransparent) {
-					meshDrawCallGroups[eRenderGroup_UI][material->getId()].push_back(m);
-				}
-				else {
-					meshDrawCallGroups[eRenderGroup_UITransparent][material->getId()].push_back(m);
-				}
+				meshDrawCallGroupsTransparent[eRenderTransparentGroup_UI].push_back(m);
 			}
 		}
 	}
@@ -373,9 +377,7 @@ void Mesh::setMeshDrawCallGroups() {
 
 void Mesh::sortMeshesByDistance(int drawCallGroup, vec3 camera) {
 	Mesh::cameraPosition = camera;
-	for (auto pair : meshDrawCallGroups[drawCallGroup]) {
-		std::qsort(pair.second.data(), pair.second.size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
-	}
+	std::qsort(meshDrawCallGroupsTransparent[drawCallGroup].data(), meshDrawCallGroupsTransparent[drawCallGroup].size(), sizeof(Mesh*), Mesh::distanceQsortCompareFunction);
 }
 void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 	if (!camera)  {
@@ -384,7 +386,7 @@ void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 	}
 
 	if (passNum == 0) {
-		for (auto pair : meshDrawCallGroups[eRenderGroup_WorldCore]) {
+		for (auto pair : meshDrawCallGroups[eRenderGroup_Core]) {
 			Material* mat = (Material*)getInstanceById(pair.first);
 			
 			mat->applyMaterial();
@@ -396,9 +398,8 @@ void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 		}
 	}
 	if (passNum == 1) {
-		Mesh::cameraPosition = camera->position;
 
-		for (auto pair : meshDrawCallGroups[eRenderGroup_WorldCustom]) {
+		for (auto pair : meshDrawCallGroups[eRenderGroup_Custom]) {
 			Material* mat = (Material*)getInstanceById(pair.first);
 			
 			mat->applyMaterial();
@@ -409,40 +410,19 @@ void Mesh::renderAllMeshes(Camera* camera, Camera* ui, int passNum) {
 			}
 		}
 
-		sortMeshesByDistance(eRenderGroup_WorldTransparent, camera->position);
-		for (auto pair : meshDrawCallGroups[eRenderGroup_WorldTransparent]) {
-			Material* mat = (Material*)getInstanceById(pair.first);
-			
-			mat->applyMaterial();
-			mat->getShader()->setCameraUniforms(camera);
+		sortMeshesByDistance(eRenderTransparentGroup_Core, camera->getWorldPosition());
 
-			for (Mesh* m : pair.second) {
-					m->render(camera, true);
-			}
+		for (Mesh* m : meshDrawCallGroupsTransparent[eRenderTransparentGroup_Core]) {
+			Material* mat = (Material*)getInstanceById(m->material);
+			m->render(camera, true);
 		}
 	}
 
 	if (passNum == 2 && ui) {
-		sortMeshesByDistance(eRenderGroup_UITransparent, vec3(0, 0, 0)); //UI camera has no real position, so just sort by origin
-		for (auto pair : meshDrawCallGroups[eRenderGroup_UI]) {
-			Material* mat = (Material*)getInstanceById(pair.first);
-			
-			mat->applyMaterial();
-			mat->getShader()->setCameraUniforms(ui);
-			
-			for (Mesh* m : pair.second) {
-					m->render(ui, false, eRenderLayer_UI);
-			}
-		}
-		for (auto pair : meshDrawCallGroups[eRenderGroup_UITransparent]) {
-			Material* mat = (Material*)getInstanceById(pair.first);
-			
-			mat->applyMaterial();
-			mat->getShader()->setCameraUniforms(ui);
-
-			for (Mesh* m : pair.second) {
-					m->render(ui, true, eRenderLayer_UI);
-			}
+		sortMeshesByDistance(eRenderTransparentGroup_UI, camera->getWorldPosition());
+		for (Mesh* m : meshDrawCallGroupsTransparent[eRenderTransparentGroup_UI]) {
+			Material* mat = (Material*)getInstanceById(m->material);
+			m->render(camera, true, eRenderLayer_UI);
 		}
 	}
 }
@@ -846,7 +826,7 @@ void Mesh::setupRenderSettings(bool transparent, bool backfaceCulling) {
 	}
 }
 
-int Mesh::prepareMaterial(ShaderProgram** shaderOut) {
+int Mesh::prepareMaterial(ShaderProgram** shaderOut, Camera* camera) {
 	Instance* m = getInstanceById(material);
 	if (!m) {
 		debug_log("No valid shader or material for '%s'. Aborting render.\n", name.c_str());
@@ -861,7 +841,10 @@ int Mesh::prepareMaterial(ShaderProgram** shaderOut) {
 		Material* mat = (Material*)m;
 		program = mat->getShader();
 
-		if (isEditorIntrinsic) mat->applyMaterial();
+		if (isEditorIntrinsic || mat->isTransparentMaterial()) { 
+			mat->applyMaterial();
+			if (camera) program->setCameraUniforms(camera);
+		};
 	}
 
 	*shaderOut = program;
