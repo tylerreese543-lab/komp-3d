@@ -75,6 +75,7 @@ public:
 
 	//Short hand for converting rotation to radians;
 	static void DrawRotationFloat3(vec3* edit);
+	static void DrawEyeDropper(std::string text, Instance* inst, int* id, int reason = 0, int toolTip = -1, int specificType = -1);
 
 	static void setAxisMovementMode(bool isMoving);
 

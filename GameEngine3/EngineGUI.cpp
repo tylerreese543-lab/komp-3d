@@ -147,6 +147,33 @@ void EngineGUI::DrawHierarchyNode(Instance* instance) {
 	std::string display_name = instance->getEngineGUIHash();
 	bool is_open = ImGui::TreeNodeEx(display_name.c_str(), flags);
 
+
+	if (ImGui::BeginDragDropSource() && instance->type != Instance::InstanceType_Scene) {
+    // Pass a unique string ID (max 32 chars) and pointer/ID data
+
+		int node_id = instance->getId();
+		ImGui::SetDragDropPayload("SCENE_NODE", &node_id, sizeof(int));
+		ImGui::Text("Moving %s", instance->name.c_str());
+		ImGui::EndDragDropSource();
+	}
+
+// 2. Allow other nodes to be dropped onto this node
+	if (ImGui::BeginDragDropTarget()) {
+		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_NODE")) {
+			int dragged_node_id = *(const int*)payload->Data;
+			// Handle reparenting or reordering logic here
+
+
+			Instance* dragged_instance = Instance::getInstanceById(dragged_node_id);
+			if (dragged_instance && dragged_instance != instance) {
+				// Reparent the dragged instance to the current instance
+				dragged_instance->setParent(instance);
+				//debug_log("Reparented %s to %s\n", dragged_instance->name.c_str(), instance->name.c_str());
+			}
+		}
+		ImGui::EndDragDropTarget();
+	}
+
 	if (ImGui::BeginPopupContextItem(display_name.c_str())) {
 		//printf("Drawing for Instance %s\n", instance->name.c_str());
 		if (ImGui::MenuItem("Clone")) {
@@ -369,6 +396,43 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 		ImGui::Checkbox("Represent Parent", &(m->wrapAroundParentMesh));
 		ImGui::Checkbox("Always Update", &(m->alwaysUpdate));
 	}
+
+	if (Instance::isInstanceOf(inst->type, Instance::InstanceType_Value)) {
+
+		if (inst->type == Instance::InstanceType_IntegerValue) {
+			IntegerValue* m = (IntegerValue*)inst;
+			ImGui::InputInt("Value", &m->value);
+		}
+
+		if (inst->type == Instance::InstanceType_FloatValue) {
+			FloatValue* m = (FloatValue*)inst;
+			ImGui::InputFloat("Value", &m->value);
+		}
+
+		if (inst->type == Instance::InstanceType_BooleanValue) {
+			BooleanValue* m = (BooleanValue*)inst;
+			ImGui::Checkbox("Value", &m->value);
+		}
+
+		if (inst->type == Instance::InstanceType_Vector3Value) {
+			Vector3Value* m = (Vector3Value*)inst;
+			ImGui::InputFloat3("Value", (float*)&m->value);
+		}
+
+		if (inst->type == Instance::InstanceType_StringValue) {
+			StringValue* m = (StringValue*)inst;
+			ImGui::InputText("Value", &m->value);
+		}
+
+		if (inst->type == Instance::InstanceType_InstanceValue) {
+
+			if (hasEyeDropCompleted(inst->getId(), 1)) {
+				endEyeDropper(&((InstanceValue*)inst)->value);
+			}
+			InstanceValue* m = (InstanceValue*)inst;
+			startEyeDropper(inst->getId(), 1, true);
+		}
+	}
 	if (inst->type == Instance::InstanceType_Material) {
 		Material* m = (Material*)inst;
 
@@ -521,11 +585,6 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 		ImGui::Checkbox("Storage Folder", &m->storageFolder);
 		return;
 	}
-	if (inst->type == Instance::InstanceType_BooleanValue) {
-		BooleanValue* m = (BooleanValue*)inst;
-		ImGui::Checkbox("Value", &m->value);
-		return;
-	}
 	if (inst->type == Instance::InstanceType_UIRootNode) {
 		UIRootNode* m = (UIRootNode*)inst;
 
@@ -584,17 +643,24 @@ snprintf(timeOverlay, sizeof(timeOverlay), "%02d:%02d / %02d:%02d",
 // You can use ImGui::SameLine() variations if you want to align it to the right, 
 // but by default, this prints left-aligned on the very next line:
 ImGui::Text("%s", timeOverlay);
+		
 
-		ImGui::InputText("Sound Group", placeholderName(Instance::getInstanceById(m->group)), ImGuiInputTextFlags_ReadOnly);
-		renderTooltipForItem(IDS_IATTR_GEOMETRY);
-		if (ImGui::Button("Select Sound Group...")) {
-			startEyeDropper(inst->getId(), 1);
-		}
+		DrawEyeDropper("Sound Group", inst, &m->group, 1, IDS_IATTR_GEOMETRY, Instance::InstanceType_Audio);
 
 
 	}
 }
 
+void EngineGUI::DrawEyeDropper(std::string text, Instance* inst, int* id, int reason, int toolTip, int specificType) {
+
+	ImGui::InputText(text.c_str(), placeholderName(Instance::getInstanceById(*id)), ImGuiInputTextFlags_ReadOnly);
+	if (toolTip > -1) {
+		renderTooltipForItem(toolTip);
+	}
+	if (ImGui::Button(("Select" + text + "...").c_str())) {
+		startEyeDropper(inst->getId(), reason);
+	}
+}
 void EngineGUI::startEyeDropper(int ID, int reason, bool fullyCancel) {
 	eyeDropperId = -1;
 	eyeDropperToUpdateId = ID;
@@ -707,6 +773,8 @@ Instance* EngineGUI::newInstanceFromType(int type, int p) {
 }
 
 void EngineGUI::renderTooltipForItem(int tooltipType) {
+
+	if (tooltipType < 0) return;
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
 		ImGui::BeginTooltip();
 		ImGui::TextUnformatted(getTooltipString(tooltipType).c_str());
