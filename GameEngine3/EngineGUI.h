@@ -62,7 +62,6 @@ public:
 	static void DrawRightClickVoidContextMenuNode();
 
 
-
 	static float gizmoSnapPhysical; //How much do we snap on translate/scaling
 	static float gizmoSnapOrientation; //How much do we snap on rotation
 

@@ -343,7 +343,11 @@ void LuaResource::InitializeLua() {
 		"Destroy", [](Instance* self, sol::this_state ts) {
 			self->setParent(nullptr);
 			destroyQueue.insert(self);
-		}
+		},
+
+		"HasTag", &Instance::hasTag,
+		"AddTag", & Instance::addTag,
+		"RemoveTag", & Instance::removeTag
 
 	);
 	

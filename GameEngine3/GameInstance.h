@@ -15,6 +15,7 @@
 
 #include "Engine/tooltips.h"
 
+#include "TagContainer.h"
 typedef std::map<int, int> inst_conv_map;
 class Instance {
 	static int currentinstanceID;
@@ -82,6 +83,9 @@ public:
 
 	bool isActive;
 	std::string name;
+
+	TagContainer tags;
+
 	Instance* parent;
 	std::set<Instance*> children;
 	std::set<int> childIds; //Only use this for temp save/load;
@@ -103,6 +107,11 @@ public:
 	
 
 	//Am I the descendant of an inactive folder?
+
+
+	bool hasTag(std::string tag);
+	void addTag(std::string tag);
+	void removeTag(std::string tag);
 	bool is(int type);
 	bool isInstanceDescendantOfInactiveFolder();	//Checks parents' 'omitFromSave()'
 	bool shouldWriteToFile();

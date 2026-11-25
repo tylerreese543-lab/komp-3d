@@ -302,6 +302,7 @@ xcopy "$(ProjectDir)assimp-vc143-mt.dll" "$(TargetDir)" /Y /D</Command>
     <ClInclude Include="SoundInstance.h" />
     <ClInclude Include="SpatialInstance.h" />
     <ClInclude Include="Stream.h" />
+    <ClInclude Include="TagContainer.h" />
     <ClInclude Include="TextGeometry.h" />
     <ClInclude Include="TextureResource.h" />
     <ClInclude Include="Value.h" />
@@ -338,6 +339,7 @@ xcopy "$(ProjectDir)assimp-vc143-mt.dll" "$(TargetDir)" /Y /D</Command>
     <ClCompile Include="SoundInstance.cpp" />
     <ClCompile Include="SpatialInstance.cpp" />
     <ClCompile Include="Stream.cpp" />
+    <ClCompile Include="TagContainer.cpp" />
     <ClCompile Include="TextGeometry.cpp" />
     <ClCompile Include="TextureResource.cpp" />
     <ClCompile Include="Value.cpp" />

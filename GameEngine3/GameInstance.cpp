@@ -251,6 +251,8 @@ int Instance::loadInstanceFromFile(void* data, int off) {
 		o += sizeof(int);
 		childIds.insert(childId);
 	}
+
+	o += tags.loadFromFile(data, o);
 	return o - off;
 }
 
@@ -309,6 +311,7 @@ int Instance::saveInstanceToFile(FILE* file) {
 		int childId = (child != nullptr) ? child->getId() : -1;
 		fwrite(&childId, sizeof(int), 1, file);
 	}
+	tags.writeToFile(file);
 	return 0; //TODO: return the size of the data written to the file, may not be needed however
 }
 
@@ -341,6 +344,7 @@ int Instance::getNumSaveBytes() {
 	int size = 0;
 	size += sizeof(int); // instanceId
 	// name bytes written as C-string (null-terminated)
+	size += tags.getNumSaveBytes(); // tags
 	size += (int)((name.size() + 1) * sizeof(char)); // name data (including null)
 	size += 2 * sizeof(int); // parentId, numChildren
 	size += (int)(children.size() * sizeof(int)); // childIds
@@ -373,6 +377,18 @@ bool Instance::isInstanceDescendantOfInactiveFolder() {
 	return pFolder->isInstanceDescendantOfInactiveFolder();
 }
 
+
+bool Instance::hasTag(std::string tag) {
+	return tags.hasTag(tag);
+}
+
+void Instance::addTag(std::string tag) {
+	tags.addTag(tag);
+}
+
+void Instance::removeTag(std::string tag) {
+	tags.removeTag(tag);
+}
 int Folder::getNumSaveBytes() {
 	int size = Instance::getNumSaveBytes() + sizeof(bool);
 	return size;

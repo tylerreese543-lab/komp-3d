@@ -80,7 +80,7 @@ const int EngineGUI::EDITOR_ADD_INSTANCE[] = {
 const std::string EngineGUI::placeholderNoInstance = "No instance selected";
 char EngineGUI::search[];
 bool EngineGUI::isModalAddInstanceOpen = false;
-bool EngineGUI::newInstanceSelected	 = false;
+bool EngineGUI::newInstanceSelected = false;
 bool EngineGUI::isInspectorFocused = false;
 bool EngineGUI::isHierarchyFocused = false;
 bool EngineGUI::fullyCancelEyeDropper = false;
@@ -172,7 +172,7 @@ void EngineGUI::DrawHierarchyNode(Instance* instance) {
 
 
 	if (ImGui::BeginDragDropSource() && instance->type != Instance::InstanceType_Scene) {
-    // Pass a unique string ID (max 32 chars) and pointer/ID data
+		// Pass a unique string ID (max 32 chars) and pointer/ID data
 
 		int node_id = instance->getId();
 		ImGui::SetDragDropPayload("SCENE_NODE", &node_id, sizeof(int));
@@ -180,7 +180,7 @@ void EngineGUI::DrawHierarchyNode(Instance* instance) {
 		ImGui::EndDragDropSource();
 	}
 
-// 2. Allow other nodes to be dropped onto this node
+	// 2. Allow other nodes to be dropped onto this node
 	if (ImGui::BeginDragDropTarget()) {
 		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_NODE")) {
 			int dragged_node_id = *(const int*)payload->Data;
@@ -202,7 +202,7 @@ void EngineGUI::DrawHierarchyNode(Instance* instance) {
 		if (ImGui::MenuItem("Clone")) {
 			// Do action
 			selectInstance(instance->clone());
-			
+
 		}
 		if (ImGui::MenuItem("Delete")) {
 			// Do action
@@ -236,7 +236,7 @@ void EngineGUI::DrawHierarchyNode(Instance* instance) {
 		if (has_children) {
 			for (Instance* child : instance->children) {
 				// Recursively call the same function for the next layer down
-				
+
 				if (child->omitFromHierarchyRender()) {
 					continue; // Skip this child if it's null or should be omitted
 				}
@@ -294,404 +294,478 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 	if (ImGui::Button("Select Parent...")) {
 		startEyeDropper(inst->getId());
 	}
-	if (Instance::isInstanceOf(inst->type, Instance::InstanceType_Mesh)) {
-		Mesh* mesh = (Mesh*)inst;
 
-		if (hasEyeDropCompleted(inst->getId(), 1)) {
-			endEyeDropper(&mesh->material);
-			mesh->VAODirty = true;
-		}
-		if (hasEyeDropCompleted(inst->getId(), 2)) {
-			endEyeDropper(&mesh->geometry);
-			mesh->VAODirty = true;
-		}
-		ImGui::InputFloat3("Position", (float*)&mesh->position);
-		renderTooltipForItem(IDS_IATTR_POSITION);
-		DrawRotationFloat3(&mesh->rotation);
-		renderTooltipForItem(IDS_IATTR_ROTATION);
-		ImGui::InputFloat3("Scale", (float*)&mesh->scale);
-		renderTooltipForItem(IDS_IATTR_SCALE);
-		Instance* meshMat = Instance::getInstanceById(mesh->material);
+	if (ImGui::CollapsingHeader("Attributes", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Indent();
 
-		ImGui::InputText("Material", placeholderName(meshMat), ImGuiInputTextFlags_ReadOnly);
-		renderTooltipForItem(IDS_IATTR_MATERIAL);
-		if (ImGui::Button("Select Material...")) {
-			startEyeDropper(inst->getId(), 1);
-			//eyeDropperSpecificType = Instance::InstanceType_Material;
-		}
-
-		if (inst->type == Instance::InstanceType_Mesh) {
-			Instance* meshGeom = Instance::getInstanceById(mesh->geometry);
-			ImGui::InputText("Geometry", placeholderName(meshGeom), ImGuiInputTextFlags_ReadOnly);
-			renderTooltipForItem(IDS_IATTR_GEOMETRY);
-			if (ImGui::Button("Select Geometry...")) {
-				startEyeDropper(inst->getId(), 2);
-				eyeDropperSpecificType = Instance::InstanceType_Geometry;
-			}
-
-		}
-		if (inst->type == Instance::InstanceType_TextGeometry) {
-			TextGeometry* m = (TextGeometry*)inst;
-			if (newInstanceSelected) {
-				auto it = TextGeometry::fontCharacterMaps.find(m->font);
-				if (it != TextGeometry::fontCharacterMaps.end()){
-					currentSelectionDropdown = std::distance(TextGeometry::fontCharacterMaps.begin(), it);
-				}
-				else {
-					currentSelectionDropdown = -1;
-				}
-			}
-			if (DrawDropdown("Font", TextGeometry::fontNames.data(), TextGeometry::fontNames.size()) != -1) {
-				m->setFont(TextGeometry::fontNames[currentSelectionDropdown]);
-			}
-
-			if (ImGui::InputText("Text", &m->text)) {
-				m->isDirty = true;
-			}
-
-		}
-		
-		ImGui::Checkbox("Backface Culling", &(mesh->cull));
-		if (newInstanceSelected) {
-			currentSelectionDropdown2 = mesh->renderLayer;
-		}
-		if (DrawDropdown("Render Layer", (std::string*)Mesh::renderLayerNames, eRenderLayer_MAX, &currentSelectionDropdown2) != -1) {
-			mesh->renderLayer = currentSelectionDropdown2;
-		}
-		return;
-	}
-
-	if (inst->type == Instance::InstanceType_Camera) {
-		Camera* m = (Camera*)inst;
-		ImGui::InputFloat3("Position", (float*)&m->position);
-		renderTooltipForItem(IDS_IATTR_POSITION);
-		DrawRotationFloat3(&m->rotation);
-		renderTooltipForItem(IDS_IATTR_ROTATION);
-		ImGui::Checkbox("Orthographic", &m->isOrthographic);
-		ImGui::SliderFloat("Field Of View", &m->fov, 0.0f, 180.0f, "FOV: %.3f deg");
-	}
-	if (inst->type == Instance::InstanceType_Scene) {
-		Scene* m = (Scene*)inst;
-		if (hasEyeDropCompleted(inst->getId(), 2)) {
-			endEyeDropper(&m->startCamera);
-		}
-		if (hasEyeDropCompleted(inst->getId(), 3)) {
-			endEyeDropper(&m->renderShader);
-		}
-		ImGui::InputText("Start Camera", placeholderName(Instance::getInstanceById(m->startCamera)), ImGuiInputTextFlags_ReadOnly);
-		renderTooltipForItem(IDS_IATTR_GEOMETRY);
-		if (ImGui::Button("Select Start Camera...")) {
-			startEyeDropper(inst->getId(), 2);
-			eyeDropperSpecificType = Instance::InstanceType_Camera;
-		}
-
-		ImGui::InputText("Output Shader", placeholderName(Instance::getInstanceById(m->renderShader)), ImGuiInputTextFlags_ReadOnly);
-		renderTooltipForItem(IDS_IATTR_GEOMETRY);
-		if (ImGui::Button("Select Output Shader...")) {
-			startEyeDropper(inst->getId(), 3);
-			eyeDropperSpecificType = Instance::InstanceType_ShaderProgram;
-		}
-
-		ImGui::ColorEdit3("Ambient Light", (float*)&Light::ambient);
-		ImGui::ColorEdit4("Background Color", (float*)&Graphics::backgroundColor);
-		if (ImGui::InputFloat("Move Snap", (float*)&gizmoSnapPhysical)) {
-			if (gizmoSnapPhysical < 0.0f) {
-				gizmoSnapPhysical = 0.0f;
-			}
-		}
-		if (ImGui::InputFloat("Rotate Snap", (float*)&gizmoSnapOrientation)) {
-			if (gizmoSnapOrientation < 0.0f) {
-				gizmoSnapOrientation = 0.0f;
-			}
-		}
-
-		
-		if (newInstanceSelected) {
-			if (gizmoType == GizmoType_Translate) {
-				currentSelectionDropdown = 0;
-			}
-			else if (gizmoType == GizmoType_Rotate) {
-				currentSelectionDropdown = 1;
-			}
-		}
-		if (DrawDropdown("Gizmo Type", (std::string*)gizmoTypeNames, 3) != -1) {
-			gizmoType = currentSelectionDropdown;
-		}
-
-		ImGui::Checkbox("Rotate In Local Space", &gizmoLocalSpace);
-	}
-	if (inst->type == Instance::InstanceType_Collision3D) {
-		Collision3D* m = (Collision3D*)inst;
-		vec3 position = m->position;
-		vec3 size = m->scale;
-		if (ImGui::InputFloat3("Position", (float*)&position)) {
-			m->setPosition(position);
-		};
-		DrawRotationFloat3(&m->rotation);
-		renderTooltipForItem(IDS_IATTR_POSITION);
-		if (ImGui::InputFloat3("Size", (float*)&size)) {
-			m->setSize(size);
-		};
-		renderTooltipForItem(IDS_IATTR_ROTATION);
-
-
-		ImGui::Checkbox("Preserve Dimensions", &(m->preserveRotatedSize));
-		ImGui::Checkbox("Represent Parent", &(m->wrapAroundParentMesh));
-		ImGui::Checkbox("Always Update", &(m->alwaysUpdate));
-	}
-
-	if (Instance::isInstanceOf(inst->type, Instance::InstanceType_Value)) {
-
-		if (inst->type == Instance::InstanceType_IntegerValue) {
-			IntegerValue* m = (IntegerValue*)inst;
-			ImGui::InputInt("Value", &m->value);
-		}
-
-		if (inst->type == Instance::InstanceType_FloatValue) {
-			FloatValue* m = (FloatValue*)inst;
-			ImGui::InputFloat("Value", &m->value);
-		}
-
-		if (inst->type == Instance::InstanceType_BooleanValue) {
-			BooleanValue* m = (BooleanValue*)inst;
-			ImGui::Checkbox("Value", &m->value);
-		}
-
-		if (inst->type == Instance::InstanceType_Vector3Value) {
-			Vector3Value* m = (Vector3Value*)inst;
-			ImGui::InputFloat3("Value", (float*)&m->value);
-		}
-
-		if (inst->type == Instance::InstanceType_StringValue) {
-			StringValue* m = (StringValue*)inst;
-			ImGui::InputText("Value", &m->value);
-		}
-
-		if (inst->type == Instance::InstanceType_InstanceValue) {
+		if (Instance::isInstanceOf(inst->type, Instance::InstanceType_Mesh)) {
+			Mesh* mesh = (Mesh*)inst;
 
 			if (hasEyeDropCompleted(inst->getId(), 1)) {
-				endEyeDropper(&((InstanceValue*)inst)->value);
+				endEyeDropper(&mesh->material);
+				mesh->VAODirty = true;
 			}
-			InstanceValue* m = (InstanceValue*)inst;
-			startEyeDropper(inst->getId(), 1, true);
-		}
-	}
-	if (inst->type == Instance::InstanceType_Material) {
-		Material* m = (Material*)inst;
+			if (hasEyeDropCompleted(inst->getId(), 2)) {
+				endEyeDropper(&mesh->geometry);
+				mesh->VAODirty = true;
+			}
+			ImGui::InputFloat3("Position", (float*)&mesh->position);
+			renderTooltipForItem(IDS_IATTR_POSITION);
+			DrawRotationFloat3(&mesh->rotation);
+			renderTooltipForItem(IDS_IATTR_ROTATION);
+			ImGui::InputFloat3("Scale", (float*)&mesh->scale);
+			renderTooltipForItem(IDS_IATTR_SCALE);
+			Instance* meshMat = Instance::getInstanceById(mesh->material);
 
-		for (int i = 0; i < eMaterialTexture_MAX; i++) {
-			if (hasEyeDropCompleted(inst->getId(), i + 1)) {
-				debug_log("Eye dropper completed for target %d\n", i);
-				if (isEyeDropperValidAndOfType(Instance::InstanceType_ImageResource)) {
-					m->setTextureById(eyeDropperId, i);
+			ImGui::InputText("Material", placeholderName(meshMat), ImGuiInputTextFlags_ReadOnly);
+			renderTooltipForItem(IDS_IATTR_MATERIAL);
+			if (ImGui::Button("Select Material...")) {
+				startEyeDropper(inst->getId(), 1);
+				//eyeDropperSpecificType = Instance::InstanceType_Material;
+			}
+
+			if (inst->type == Instance::InstanceType_Mesh) {
+				Instance* meshGeom = Instance::getInstanceById(mesh->geometry);
+				ImGui::InputText("Geometry", placeholderName(meshGeom), ImGuiInputTextFlags_ReadOnly);
+				renderTooltipForItem(IDS_IATTR_GEOMETRY);
+				if (ImGui::Button("Select Geometry...")) {
+					startEyeDropper(inst->getId(), 2);
+					eyeDropperSpecificType = Instance::InstanceType_Geometry;
 				}
-				else {
-					m->setTextureById(-1, i);
+
+			}
+			if (inst->type == Instance::InstanceType_TextGeometry) {
+				TextGeometry* m = (TextGeometry*)inst;
+				if (newInstanceSelected) {
+					auto it = TextGeometry::fontCharacterMaps.find(m->font);
+					if (it != TextGeometry::fontCharacterMaps.end()) {
+						currentSelectionDropdown = std::distance(TextGeometry::fontCharacterMaps.begin(), it);
+					}
+					else {
+						currentSelectionDropdown = -1;
+					}
 				}
-				endEyeDropper(nullptr);
-			}
-		}
+				if (DrawDropdown("Font", TextGeometry::fontNames.data(), TextGeometry::fontNames.size()) != -1) {
+					m->setFont(TextGeometry::fontNames[currentSelectionDropdown]);
+				}
 
-		if (hasEyeDropCompleted(inst->getId(), eMaterialTexture_MAX + 2)) {
-			debug_log("Eye dropper completed for shader\n");
-			if (isEyeDropperValidAndOfType(Instance::InstanceType_ShaderProgram)) {
-				m->setShader((ShaderProgram*)Instance::getInstanceById(eyeDropperId));
-			}
-			else {
-				m->setShader(nullptr);
-			}
-			endEyeDropper(nullptr);
-		}
+				if (ImGui::InputText("Text", &m->text)) {
+					m->isDirty = true;
+				}
 
-		ImGui::ColorEdit4("Albedo Color", (float*)&m->diffuseColor);
-		ImGui::SliderInt("Specularity", &m->specularity, 0, 256);
-		ImGui::SliderFloat("Roughness", &m->roughness, 0, 1);
-		renderTooltipForItem(IDS_IATTR_POSITION);
-		ImGui::Text("Texture Targets");
-
-		for (int i = 0; i < eMaterialTexture_MAX; i++) {
-			ImGui::Checkbox((std::string("Use ") + ImageResource::textureTypeNames[i + 1]).c_str(), &m->textureUseFlags[i]);
-			renderTooltipForItem(IDS_IATTR_GEOMETRY);
-		}
-		for (int i = 0; i < eMaterialTexture_MAX; i++) {
-			ImGui::InputText((ImageResource::textureTypeNames[i + 1] + " Texture").c_str(), placeholderName(Instance::getInstanceById(m->getTextureInstanceId(i))), ImGuiInputTextFlags_ReadOnly);
-			renderTooltipForItem(IDS_IATTR_GEOMETRY);
-			if (ImGui::Button(("Select " + ImageResource::textureTypeNames[i + 1] + " Texture...").c_str())) {
-				startEyeDropper(inst->getId(), i + 1, true);
-			}
-		}
-		ImGui::InputText("Shader", placeholderName(Instance::getInstanceById(m->getShaderInstanceId())), ImGuiInputTextFlags_ReadOnly);
-		renderTooltipForItem(IDS_IATTR_GEOMETRY);
-		if (ImGui::Button("Select Shader...")) {
-			startEyeDropper(inst->getId(), eMaterialTexture_MAX + 2, true);
-		}
-		if (ImGui::Button("Auto-Prepare Material")) {
-			m->autoPrepare(true);
-		};
-
-		ImGui::Checkbox("Transparent", &(m->isTransparent));
-		ImGui::Checkbox("Lit", &(m->isLit));
-	}
-	if (inst->type == Instance::InstanceType_PointLight) {
-		Light* m = (Light*)inst;
-
-		ImGui::InputFloat3("Position", (float*)&m->position);
-		ImGui::ColorEdit3("Color", (float*)&m->color);
-		renderTooltipForItem(IDS_IATTR_POSITION);
-		ImGui::InputFloat("Intensity", (float*)&m->intensity);
-		DrawRotationFloat3(&m->rotation);
-
-		float range = m->rangeAngle * (180.0f / PI);
-		if (ImGui::SliderFloat("Range", &range, 0, 90, "%.1f degrees")) {
-			m->rangeAngle = range * (PI / 180.0f);
-		};
-
-		ImGui::Checkbox("Directional", &m->isDirectional);
-		ImGui::Checkbox("Sun", &m->isSunLight);
-	}
-	if (Instance::isInstanceOf(inst->type, Instance::InstanceType_Resource)) {
-		Resource* m = (Resource*)inst;
-		if (ImGui::InputText("File Path", &m->filePath, ImGuiInputTextFlags_EnterReturnsTrue)) {
-			if (inst->type == Instance::InstanceType_LuaResource) {
-				LuaResource* luaRes = (LuaResource*)inst;
-				luaRes->loadFromFile(m->filePath);
 			}
 
-			if (inst->type == Instance::InstanceType_ImageResource) {
-				ImageResource* imgRes = (ImageResource*)inst;
-				imgRes->loadFromFile(m->filePath);
-			}
-			if (inst->type == Instance::InstanceType_ShaderResource) {
-				ShaderResource* imgRes = (ShaderResource*)inst;
-				imgRes->loadFromFile(m->filePath.c_str());
-			}
-			if (inst->type == Instance::InstanceType_Geometry) {
-				Geometry* imgRes = (Geometry*)inst;
-				imgRes->loadFromFile(m->filePath.c_str());
-			}
-
-			if (inst->type == Instance::InstanceType_ShaderProgram) {
-				ShaderProgram* imgRes = (ShaderProgram*)inst;
-				imgRes->createProgram();
-			}
-		}
-		renderTooltipForItem(IDS_IATTR_FILEPATH);
-		if (inst->type == Instance::InstanceType_ImageResource) {
-			ImageResource* imgRes = (ImageResource*)inst;
+			ImGui::Checkbox("Backface Culling", &(mesh->cull));
 			if (newInstanceSelected) {
-				printf("New instance selected, resetting dropdown to %d\n", ((ImageResource*)inst)->textureType);
-				currentSelectionDropdown = ((ImageResource*)inst)->textureType + 1;
+				currentSelectionDropdown2 = mesh->renderLayer;
 			}
-
-			if (DrawDropdown("Texture Port", (std::string*)ImageResource::textureTypeNames, eMaterialTexture_MAX + 1) != -1) {
-				imgRes->textureType = currentSelectionDropdown - 1;
-				imgRes->loadFromFile(imgRes->filePath);
+			if (DrawDropdown("Render Layer", (std::string*)Mesh::renderLayerNames, eRenderLayer_MAX, &currentSelectionDropdown2) != -1) {
+				mesh->renderLayer = currentSelectionDropdown2;
 			}
 		}
 
-		if (inst->type == Instance::InstanceType_ShaderResource) {
-			ShaderResource* m = (ShaderResource*)inst;
+		if (inst->type == Instance::InstanceType_Camera) {
+			Camera* m = (Camera*)inst;
+			ImGui::InputFloat3("Position", (float*)&m->position);
+			renderTooltipForItem(IDS_IATTR_POSITION);
+			DrawRotationFloat3(&m->rotation);
+			renderTooltipForItem(IDS_IATTR_ROTATION);
+			ImGui::Checkbox("Orthographic", &m->isOrthographic);
+			ImGui::SliderFloat("Field Of View", &m->fov, 0.0f, 180.0f, "FOV: %.3f deg");
+		}
+		if (inst->type == Instance::InstanceType_Scene) {
+			Scene* m = (Scene*)inst;
+			if (hasEyeDropCompleted(inst->getId(), 2)) {
+				endEyeDropper(&m->startCamera);
+			}
+			if (hasEyeDropCompleted(inst->getId(), 3)) {
+				endEyeDropper(&m->renderShader);
+			}
+			ImGui::InputText("Start Camera", placeholderName(Instance::getInstanceById(m->startCamera)), ImGuiInputTextFlags_ReadOnly);
+			renderTooltipForItem(IDS_IATTR_GEOMETRY);
+			if (ImGui::Button("Select Start Camera...")) {
+				startEyeDropper(inst->getId(), 2);
+				eyeDropperSpecificType = Instance::InstanceType_Camera;
+			}
+
+			ImGui::InputText("Output Shader", placeholderName(Instance::getInstanceById(m->renderShader)), ImGuiInputTextFlags_ReadOnly);
+			renderTooltipForItem(IDS_IATTR_GEOMETRY);
+			if (ImGui::Button("Select Output Shader...")) {
+				startEyeDropper(inst->getId(), 3);
+				eyeDropperSpecificType = Instance::InstanceType_ShaderProgram;
+			}
+
+			ImGui::ColorEdit3("Ambient Light", (float*)&Light::ambient);
+			ImGui::ColorEdit4("Background Color", (float*)&Graphics::backgroundColor);
+			if (ImGui::InputFloat("Move Snap", (float*)&gizmoSnapPhysical)) {
+				if (gizmoSnapPhysical < 0.0f) {
+					gizmoSnapPhysical = 0.0f;
+				}
+			}
+			if (ImGui::InputFloat("Rotate Snap", (float*)&gizmoSnapOrientation)) {
+				if (gizmoSnapOrientation < 0.0f) {
+					gizmoSnapOrientation = 0.0f;
+				}
+			}
+
+
 			if (newInstanceSelected) {
-				printf("New instance selected, resetting dropdown to %d\n", ((ShaderResource*)inst)->shaderType);
-				if (((ShaderResource*)inst)->shaderType == GL_VERTEX_SHADER) {
+				if (gizmoType == GizmoType_Translate) {
 					currentSelectionDropdown = 0;
 				}
-				else if (((ShaderResource*)inst)->shaderType == GL_FRAGMENT_SHADER) {
+				else if (gizmoType == GizmoType_Rotate) {
 					currentSelectionDropdown = 1;
 				}
 			}
-			if (DrawDropdown("Shader Type", (std::string*)ShaderResource::shaderTypeNames, 2) != -1) {
-				m->shaderType = ShaderResource::shaderTypeEnums[currentSelectionDropdown];
-				m->loadFromFile(m->filePath.c_str());
+			if (DrawDropdown("Gizmo Type", (std::string*)gizmoTypeNames, 3) != -1) {
+				gizmoType = currentSelectionDropdown;
 			}
+
+			ImGui::Checkbox("Rotate In Local Space", &gizmoLocalSpace);
+		}
+		if (inst->type == Instance::InstanceType_Collision3D) {
+			Collision3D* m = (Collision3D*)inst;
+			vec3 position = m->position;
+			vec3 size = m->scale;
+			if (ImGui::InputFloat3("Position", (float*)&position)) {
+				m->setPosition(position);
+			};
+			DrawRotationFloat3(&m->rotation);
+			renderTooltipForItem(IDS_IATTR_POSITION);
+			if (ImGui::InputFloat3("Size", (float*)&size)) {
+				m->setSize(size);
+			};
+			renderTooltipForItem(IDS_IATTR_ROTATION);
+
+
+			ImGui::Checkbox("Preserve Dimensions", &(m->preserveRotatedSize));
+			ImGui::Checkbox("Represent Parent", &(m->wrapAroundParentMesh));
+			ImGui::Checkbox("Always Update", &(m->alwaysUpdate));
 		}
 
-		if (inst->type == Instance::InstanceType_Geometry) {
+		if (Instance::isInstanceOf(inst->type, Instance::InstanceType_Value)) {
+
+			if (inst->type == Instance::InstanceType_IntegerValue) {
+				IntegerValue* m = (IntegerValue*)inst;
+				ImGui::InputInt("Value", &m->value);
+			}
+
+			if (inst->type == Instance::InstanceType_FloatValue) {
+				FloatValue* m = (FloatValue*)inst;
+				ImGui::InputFloat("Value", &m->value);
+			}
+
+			if (inst->type == Instance::InstanceType_BooleanValue) {
+				BooleanValue* m = (BooleanValue*)inst;
+				ImGui::Checkbox("Value", &m->value);
+			}
+
+			if (inst->type == Instance::InstanceType_Vector3Value) {
+				Vector3Value* m = (Vector3Value*)inst;
+				ImGui::InputFloat3("Value", (float*)&m->value);
+			}
+
+			if (inst->type == Instance::InstanceType_StringValue) {
+				StringValue* m = (StringValue*)inst;
+				ImGui::InputText("Value", &m->value);
+			}
+
+			if (inst->type == Instance::InstanceType_InstanceValue) {
+
+				if (hasEyeDropCompleted(inst->getId(), 1)) {
+					endEyeDropper(&((InstanceValue*)inst)->value);
+				}
+				InstanceValue* m = (InstanceValue*)inst;
+				startEyeDropper(inst->getId(), 1, true);
+			}
+		}
+		if (inst->type == Instance::InstanceType_Material) {
+			Material* m = (Material*)inst;
+
+			for (int i = 0; i < eMaterialTexture_MAX; i++) {
+				if (hasEyeDropCompleted(inst->getId(), i + 1)) {
+					debug_log("Eye dropper completed for target %d\n", i);
+					if (isEyeDropperValidAndOfType(Instance::InstanceType_ImageResource)) {
+						m->setTextureById(eyeDropperId, i);
+					}
+					else {
+						m->setTextureById(-1, i);
+					}
+					endEyeDropper(nullptr);
+				}
+			}
+
+			if (hasEyeDropCompleted(inst->getId(), eMaterialTexture_MAX + 2)) {
+				debug_log("Eye dropper completed for shader\n");
+				if (isEyeDropperValidAndOfType(Instance::InstanceType_ShaderProgram)) {
+					m->setShader((ShaderProgram*)Instance::getInstanceById(eyeDropperId));
+				}
+				else {
+					m->setShader(nullptr);
+				}
+				endEyeDropper(nullptr);
+			}
+
+			ImGui::ColorEdit4("Albedo Color", (float*)&m->diffuseColor);
+			ImGui::SliderInt("Specularity", &m->specularity, 0, 256);
+			ImGui::SliderFloat("Roughness", &m->roughness, 0, 1);
+			renderTooltipForItem(IDS_IATTR_POSITION);
+			ImGui::Text("Texture Targets");
+
+			for (int i = 0; i < eMaterialTexture_MAX; i++) {
+				ImGui::Checkbox((std::string("Use ") + ImageResource::textureTypeNames[i + 1]).c_str(), &m->textureUseFlags[i]);
+				renderTooltipForItem(IDS_IATTR_GEOMETRY);
+			}
+			for (int i = 0; i < eMaterialTexture_MAX; i++) {
+				ImGui::InputText((ImageResource::textureTypeNames[i + 1] + " Texture").c_str(), placeholderName(Instance::getInstanceById(m->getTextureInstanceId(i))), ImGuiInputTextFlags_ReadOnly);
+				renderTooltipForItem(IDS_IATTR_GEOMETRY);
+				if (ImGui::Button(("Select " + ImageResource::textureTypeNames[i + 1] + " Texture...").c_str())) {
+					startEyeDropper(inst->getId(), i + 1, true);
+				}
+			}
+			ImGui::InputText("Shader", placeholderName(Instance::getInstanceById(m->getShaderInstanceId())), ImGuiInputTextFlags_ReadOnly);
+			renderTooltipForItem(IDS_IATTR_GEOMETRY);
+			if (ImGui::Button("Select Shader...")) {
+				startEyeDropper(inst->getId(), eMaterialTexture_MAX + 2, true);
+			}
+			if (ImGui::Button("Auto-Prepare Material")) {
+				m->autoPrepare(true);
+			};
+
+			ImGui::Checkbox("Transparent", &(m->isTransparent));
+			ImGui::Checkbox("Lit", &(m->isLit));
+		}
+		if (inst->type == Instance::InstanceType_PointLight) {
+			Light* m = (Light*)inst;
+
+			ImGui::InputFloat3("Position", (float*)&m->position);
+			ImGui::ColorEdit3("Color", (float*)&m->color);
+			renderTooltipForItem(IDS_IATTR_POSITION);
+			ImGui::InputFloat("Intensity", (float*)&m->intensity);
+			DrawRotationFloat3(&m->rotation);
+
+			float range = m->rangeAngle * (180.0f / PI);
+			if (ImGui::SliderFloat("Range", &range, 0, 90, "%.1f degrees")) {
+				m->rangeAngle = range * (PI / 180.0f);
+			};
+
+			ImGui::Checkbox("Directional", &m->isDirectional);
+			ImGui::Checkbox("Sun", &m->isSunLight);
+		}
+		if (Instance::isInstanceOf(inst->type, Instance::InstanceType_Resource)) {
+			Resource* m = (Resource*)inst;
+			if (ImGui::InputText("File Path", &m->filePath, ImGuiInputTextFlags_EnterReturnsTrue)) {
+				if (inst->type == Instance::InstanceType_LuaResource) {
+					LuaResource* luaRes = (LuaResource*)inst;
+					luaRes->loadFromFile(m->filePath);
+				}
+
+				if (inst->type == Instance::InstanceType_ImageResource) {
+					ImageResource* imgRes = (ImageResource*)inst;
+					imgRes->loadFromFile(m->filePath);
+				}
+				if (inst->type == Instance::InstanceType_ShaderResource) {
+					ShaderResource* imgRes = (ShaderResource*)inst;
+					imgRes->loadFromFile(m->filePath.c_str());
+				}
+				if (inst->type == Instance::InstanceType_Geometry) {
+					Geometry* imgRes = (Geometry*)inst;
+					imgRes->loadFromFile(m->filePath.c_str());
+				}
+
+				if (inst->type == Instance::InstanceType_ShaderProgram) {
+					ShaderProgram* imgRes = (ShaderProgram*)inst;
+					imgRes->createProgram();
+				}
+			}
+			renderTooltipForItem(IDS_IATTR_FILEPATH);
+			if (inst->type == Instance::InstanceType_ImageResource) {
+				ImageResource* imgRes = (ImageResource*)inst;
+				if (newInstanceSelected) {
+					printf("New instance selected, resetting dropdown to %d\n", ((ImageResource*)inst)->textureType);
+					currentSelectionDropdown = ((ImageResource*)inst)->textureType + 1;
+				}
+
+				if (DrawDropdown("Texture Port", (std::string*)ImageResource::textureTypeNames, eMaterialTexture_MAX + 1) != -1) {
+					imgRes->textureType = currentSelectionDropdown - 1;
+					imgRes->loadFromFile(imgRes->filePath);
+				}
+			}
+
+			if (inst->type == Instance::InstanceType_ShaderResource) {
+				ShaderResource* m = (ShaderResource*)inst;
+				if (newInstanceSelected) {
+					printf("New instance selected, resetting dropdown to %d\n", ((ShaderResource*)inst)->shaderType);
+					if (((ShaderResource*)inst)->shaderType == GL_VERTEX_SHADER) {
+						currentSelectionDropdown = 0;
+					}
+					else if (((ShaderResource*)inst)->shaderType == GL_FRAGMENT_SHADER) {
+						currentSelectionDropdown = 1;
+					}
+				}
+				if (DrawDropdown("Shader Type", (std::string*)ShaderResource::shaderTypeNames, 2) != -1) {
+					m->shaderType = ShaderResource::shaderTypeEnums[currentSelectionDropdown];
+					m->loadFromFile(m->filePath.c_str());
+				}
+			}
+
+			if (inst->type == Instance::InstanceType_Geometry) {
 				Geometry* m = (Geometry*)inst;
 				if (ImGui::Checkbox("Generate With Smoothed Normals", &m->autoCreateSmoothedNormals)) {
 					m->loadFromFile(m->filePath);
 				}
+			}
+
 		}
 
-		return;
-	}
-
-	if (inst->type == Instance::InstanceType_ShaderProgram) {
+		if (inst->type == Instance::InstanceType_ShaderProgram) {
 			if (ImGui::Button("Compile Shader...")) {
 				ShaderProgram* m = (ShaderProgram*)inst;
 				m->createProgram(true);
 			}
-			return;
+		}
+		if (inst->type == Instance::InstanceType_Folder) {
+			Folder* m = (Folder*)inst;
+			ImGui::Checkbox("Storage Folder", &m->storageFolder);
+		}
+		if (inst->type == Instance::InstanceType_UIRootNode) {
+			UIRootNode* m = (UIRootNode*)inst;
+
+			if (hasEyeDropCompleted(inst->getId(), 1)) {
+				endEyeDropper(&m->camera);
+			}
+
+			ImGui::InputText("Camera", placeholderName(Instance::getInstanceById(m->camera)), ImGuiInputTextFlags_ReadOnly);
+			renderTooltipForItem(IDS_IATTR_GEOMETRY);
+			if (ImGui::Button("Select Camera...")) {
+				startEyeDropper(inst->getId(), 1);
+				eyeDropperSpecificType = Instance::InstanceType_Camera;
+			}
+		}
+
+		if (inst->type == Instance::InstanceType_Audio) {
+			Audio* m = (Audio*)inst;
+
+			if (newInstanceSelected) {
+				currentSamplesAudioPlayback = m->getTimestampSamples();
+				maxSamplesAudioPlayback = m->getMaxSamples();
+			}
+			if (hasEyeDropCompleted(inst->getId(), 1)) {
+				endEyeDropper(&m->group);
+			}
+			if (ImGui::InputText("File Path", &m->audioName, ImGuiInputTextFlags_EnterReturnsTrue)) {
+				Audio::loadSound(m->audioName);
+				m->setAudioSource(m->audioName);
+			}
+			if (ImGui::Button("Play")) {
+				m->play();
+			}
+			if (ImGui::Button("Stop")) {
+				m->stop();
+			}
+			ImGui::PushItemWidth(-1.0f);
+			if (ImGui::SliderInt("##AudioSeeker", &currentSamplesAudioPlayback, 0, m->getMaxSamples(), "")) {
+				// Handle manual dragging adjustments here
+			}
+			ImGui::PopItemWidth();
+
+			if (ImGui::IsItemDeactivatedAfterEdit()) {
+				// The user just let go of the mouse! 
+				m->setTimestampSamples(currentSamplesAudioPlayback);
+			}
+			// Keep your standard audio engine safety check
+			if (!ImGui::IsItemActive()) {
+				currentSamplesAudioPlayback = m->getTimestampSamples();
+			}
+
+			char timeOverlay[32];
+			snprintf(timeOverlay, sizeof(timeOverlay), "%02d:%02d / %02d:%02d",
+				(int)floor(m->getTimestampSeconds()) / 60, (int)floor(m->getTimestampSeconds()) % 60,
+				(int)floor(m->getMaxSeconds()) / 60, (int)floor(m->getMaxSeconds()) % 60);
+			// 4. Position and render the text directly below
+			// You can use ImGui::SameLine() variations if you want to align it to the right, 
+			// but by default, this prints left-aligned on the very next line:
+			ImGui::Text("%s", timeOverlay);
+
+
+			DrawEyeDropper("Sound Group", inst, &m->group, 1, IDS_IATTR_GEOMETRY, Instance::InstanceType_Audio);
+
+
+		}
+
+		ImGui::Unindent();
 	}
-	if (inst->type == Instance::InstanceType_Folder) {
-		Folder* m = (Folder*)inst;
-		ImGui::Checkbox("Storage Folder", &m->storageFolder);
-		return;
+
+
+	if (ImGui::CollapsingHeader("Tags", ImGuiTreeNodeFlags_DefaultOpen)) {
+		std::vector<std::string> tags = inst->tags.getTagsAsVector();
+		int indexToRemove = -1; // Initialize to -1 to indicate no removal
+
+		if (tags.empty()) {
+			ImGui::TextDisabled("No tags available.");
+		}
+		else if (ImGui::BeginTable("TagsTable", 2, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn("Tag", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Remove", ImGuiTableColumnFlags_WidthFixed);
+
+			for (int i = 0; i < (int)tags.size(); ++i) {
+				ImGui::TableNextRow();
+				ImGui::PushID(i); // Required so every "X" button has a unique ID
+
+				// Column 0: tag label
+				ImGui::TableSetColumnIndex(0);
+				ImGui::AlignTextToFramePadding();
+				ImGui::TextUnformatted(tags[i].c_str());
+
+				// Column 1: remove button
+				ImGui::TableSetColumnIndex(1);
+				if (ImGui::SmallButton("X")) {
+					indexToRemove = i; // Defer removal until outside the loop
+				}
+
+				ImGui::PopID();
+			}
+			ImGui::EndTable();
+		}
+		// Safely erase after ImGui finishes iterating
+		if (indexToRemove != -1) {
+			inst->removeTag(tags[indexToRemove]);
+		}
+
+		    ImGui::Spacing();
+
+    // --- Add New Tag Input + Button ---
+    static char newTagBuffer[64] = "";
+    
+    // Make the input box fill available width minus the "Add" button width
+    float addButtonWidth = ImGui::CalcTextSize("Add").x + ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - addButtonWidth);
+
+    bool enterPressed = ImGui::InputTextWithHint(
+        "##NewTagInput", 
+        "New tag...", 
+        newTagBuffer, 
+        IM_ARRAYSIZE(newTagBuffer), 
+        ImGuiInputTextFlags_EnterReturnsTrue
+    );
+
+    ImGui::SameLine();
+    bool addClicked = ImGui::Button("Add");
+
+    // Submit when either "Add" is clicked or Enter is pressed
+    if ((enterPressed || addClicked) && newTagBuffer[0] != '\0') {
+        std::string newTag(newTagBuffer);
+
+        inst->addTag(newTag);
+
+        newTagBuffer[0] = '\0'; // Clear input box
+        if (enterPressed) {
+            ImGui::SetKeyboardFocusHere(-1); // Keep focus in the box for rapid entry
+        }
+    }
 	}
-	if (inst->type == Instance::InstanceType_UIRootNode) {
-		UIRootNode* m = (UIRootNode*)inst;
-
-		if (hasEyeDropCompleted(inst->getId(), 1)) {
-			endEyeDropper(&m->camera);
-		}
-
-		ImGui::InputText("Camera", placeholderName(Instance::getInstanceById(m->camera)), ImGuiInputTextFlags_ReadOnly);
-		renderTooltipForItem(IDS_IATTR_GEOMETRY);
-		if (ImGui::Button("Select Camera...")) {
-			startEyeDropper(inst->getId(), 1);
-			eyeDropperSpecificType = Instance::InstanceType_Camera;
-		}
-	}
-
-	if (inst->type == Instance::InstanceType_Audio) {
-		Audio* m = (Audio*)inst;
-
-		if (newInstanceSelected) {
-			currentSamplesAudioPlayback = m->getTimestampSamples();
-			maxSamplesAudioPlayback = m->getMaxSamples();
-		}
-		if (hasEyeDropCompleted(inst->getId(), 1)) {
-			endEyeDropper(&m->group);
-		}
-		if (ImGui::InputText("File Path", &m->audioName, ImGuiInputTextFlags_EnterReturnsTrue)) {
-			Audio::loadSound(m->audioName);
-			m->setAudioSource(m->audioName);
-		}
-		if (ImGui::Button("Play")) {
-			m->play();
-		}
-		if (ImGui::Button("Stop")) {
-			m->stop();
-		}
-		ImGui::PushItemWidth(-1.0f);
-		if (ImGui::SliderInt("##AudioSeeker", &currentSamplesAudioPlayback, 0, m->getMaxSamples(), "")) {
-			// Handle manual dragging adjustments here
-		}
-		ImGui::PopItemWidth();
-
-		if (ImGui::IsItemDeactivatedAfterEdit()) {
-    // The user just let go of the mouse! 
-			m->setTimestampSamples(currentSamplesAudioPlayback);
-		}
-// Keep your standard audio engine safety check
-		if (!ImGui::IsItemActive()) {
-			currentSamplesAudioPlayback = m->getTimestampSamples();
-		}
-
-		char timeOverlay[32];
-snprintf(timeOverlay, sizeof(timeOverlay), "%02d:%02d / %02d:%02d", 
-         (int)floor(m->getTimestampSeconds()) / 60, (int)floor(m->getTimestampSeconds()) % 60, 
-         (int)floor(m->getMaxSeconds()) / 60, (int)floor(m->getMaxSeconds()) % 60);
-// 4. Position and render the text directly below
-// You can use ImGui::SameLine() variations if you want to align it to the right, 
-// but by default, this prints left-aligned on the very next line:
-ImGui::Text("%s", timeOverlay);
-		
-
-		DrawEyeDropper("Sound Group", inst, &m->group, 1, IDS_IATTR_GEOMETRY, Instance::InstanceType_Audio);
 
 
-	}
 }
 
 void EngineGUI::DrawEyeDropper(std::string text, Instance* inst, int* id, int reason, int toolTip, int specificType) {
@@ -748,66 +822,66 @@ void EngineGUI::DrawRightClickVoidContextMenuNode() {
 }
 
 void EngineGUI::DrawAddInstanceModalNode() {
-	
+
 	if (!isModalAddInstanceOpen) return;
-		ImGui::OpenPopup("Add Instance Type");
-		ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
-		if (ImGui::BeginPopupModal("Add Instance Type", &isModalAddInstanceOpen, ImGuiWindowFlags_NoResize)) {
-			//printf("e\n");
-			// 5. The Search Bar inside the popup
-			ImGui::Text("Filter:");
-			ImGui::SameLine();
-			ImGui::InputTextWithHint("##InstanceSearch", "Type to filter...", search, IM_ARRAYSIZE(search));
+	ImGui::OpenPopup("Add Instance Type");
+	ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
+	if (ImGui::BeginPopupModal("Add Instance Type", &isModalAddInstanceOpen, ImGuiWindowFlags_NoResize)) {
+		//printf("e\n");
+		// 5. The Search Bar inside the popup
+		ImGui::Text("Filter:");
+		ImGui::SameLine();
+		ImGui::InputTextWithHint("##InstanceSearch", "Type to filter...", search, IM_ARRAYSIZE(search));
 
-			ImGui::Separator();
+		ImGui::Separator();
 
-			// 6. Scrollable child region for the matching results
-			if (ImGui::BeginChild("TypeList", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()))) {
-				//printf("b\n");
-				for (const int type : EDITOR_ADD_INSTANCE) {
+		// 6. Scrollable child region for the matching results
+		if (ImGui::BeginChild("TypeList", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()))) {
+			//printf("b\n");
+			for (const int type : EDITOR_ADD_INSTANCE) {
 
-					// Basic case-insensitive conversion helper
-					auto matches_search = [](const std::string& str, const std::string& query) {
-						if (query.empty()) return true;
-						auto it = std::search(str.begin(), str.end(), query.begin(), query.end(),
-							[](char a, char b) { return std::tolower(a) == std::tolower(b); });
-						return it != str.end();
-						};
+				// Basic case-insensitive conversion helper
+				auto matches_search = [](const std::string& str, const std::string& query) {
+					if (query.empty()) return true;
+					auto it = std::search(str.begin(), str.end(), query.begin(), query.end(),
+						[](char a, char b) { return std::tolower(a) == std::tolower(b); });
+					return it != str.end();
+					};
 
-					// Filter the results
-					if (!matches_search(Instance::getInstanceNameFromType(type), search)) {
-						continue;
-					}
-
-					// Render matching types as selectable items
-					if (ImGui::Selectable(Instance::getInstanceNameFromType(type).c_str())) {
-						
-						newInstanceFromType(type, instanceAddParentId);
-
-						isModalAddInstanceOpen = false; // Close the window on selection
-						instanceAddParentId = -1;
-						ImGui::CloseCurrentPopup();
-					}
+				// Filter the results
+				if (!matches_search(Instance::getInstanceNameFromType(type), search)) {
+					continue;
 				}
-				ImGui::EndChild();
-			}
 
-			ImGui::Separator();
+				// Render matching types as selectable items
+				if (ImGui::Selectable(Instance::getInstanceNameFromType(type).c_str())) {
 
-			// 7. Cancel button at the bottom
-			if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-				isModalAddInstanceOpen = false;
-				instanceAddParentId = -1;
-				ImGui::CloseCurrentPopup();
+					newInstanceFromType(type, instanceAddParentId);
+
+					isModalAddInstanceOpen = false; // Close the window on selection
+					instanceAddParentId = -1;
+					ImGui::CloseCurrentPopup();
+				}
 			}
-			ImGui::EndPopup();
+			ImGui::EndChild();
 		}
+
+		ImGui::Separator();
+
+		// 7. Cancel button at the bottom
+		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+			isModalAddInstanceOpen = false;
+			instanceAddParentId = -1;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
 }
 
 Instance* EngineGUI::newInstanceFromType(int type, int p) {
 	Instance* i = Scene::newInstanceFromType(type);
 	if (i && p) {
-		i->setParent(Instance::getInstanceById(p)); 
+		i->setParent(Instance::getInstanceById(p));
 	}
 	if (i->type == Instance::InstanceType_Material) {
 		Material* m = (Material*)i;
@@ -859,39 +933,40 @@ bool EngineGUI::isEyeDropperValidAndOfType(int type) {
 	Instance* i = Instance::getInstanceById(eyeDropperId);
 	if (i) {
 		return Instance::isInstanceOf(i->type, type) || type == -1;
-	} else {
+	}
+	else {
 		return false;
 	}
 }
 
 void EngineGUI::DrawRotationFloat3(vec3* edit) {
 	vec3 degrees = *edit * (180 / PI);
-	
+
 	if (ImGui::InputFloat3("Rotation", (float*)&degrees)) {
 		*edit = degrees * (PI / 180);
 	}
 }
 
 void EngineGUI::calculateMouseRayDirection() {
-MouseData md = Graphics::getInstance()->mouse_data;
-vec2 mouseNDC = vec2(md.screenNormalized.X, -md.screenNormalized.Y);
+	MouseData md = Graphics::getInstance()->mouse_data;
+	vec2 mouseNDC = vec2(md.screenNormalized.X, -md.screenNormalized.Y);
 
-// 1. Unproject from Clip Space to Eye (Camera) Space
-vec4 clipCoords = vec4(mouseNDC.X, mouseNDC.Y, -1.0f, 1.0f);
-Camera* cam = Scene::getCurrentCamera();
-vec4 eyeCoords = cam->projection.inverse() * clipCoords;
+	// 1. Unproject from Clip Space to Eye (Camera) Space
+	vec4 clipCoords = vec4(mouseNDC.X, mouseNDC.Y, -1.0f, 1.0f);
+	Camera* cam = Scene::getCurrentCamera();
+	vec4 eyeCoords = cam->projection.inverse() * clipCoords;
 
-// Perform perspective divide so X, Y, and Z share the exact same scale
-if (eyeCoords.W != 0.0f) {
-	eyeCoords.X /= eyeCoords.W;
-	eyeCoords.Y /= eyeCoords.W;
-	eyeCoords.Z /= eyeCoords.W;
-}
-eyeCoords.W = 0.0f; // Treat as a direction vector (ignore camera translation)
+	// Perform perspective divide so X, Y, and Z share the exact same scale
+	if (eyeCoords.W != 0.0f) {
+		eyeCoords.X /= eyeCoords.W;
+		eyeCoords.Y /= eyeCoords.W;
+		eyeCoords.Z /= eyeCoords.W;
+	}
+	eyeCoords.W = 0.0f; // Treat as a direction vector (ignore camera translation)
 
-// 2. Transform from Camera Space to World Space (NO .inverse() here!)
-vec4 worldDirVec4 = cam->getWorldTransform() * eyeCoords;
-mouseRayDirection = vec3(worldDirVec4.X, worldDirVec4.Y, worldDirVec4.Z).smag(1.0f);
+	// 2. Transform from Camera Space to World Space (NO .inverse() here!)
+	vec4 worldDirVec4 = cam->getWorldTransform() * eyeCoords;
+	mouseRayDirection = vec3(worldDirVec4.X, worldDirVec4.Y, worldDirVec4.Z).smag(1.0f);
 
 
 }
@@ -921,7 +996,7 @@ void EngineGUI::DrawGizmo() {
 	Mesh* tz = (Mesh*)Instance::getInstanceById(Scene::translateInstance[eAxis_Z - 1]);
 	if (!tz) return;
 	if (!Instance::isInstanceOf(tz->type, Instance::InstanceType_Mesh)) return;
-	
+
 	Mesh* orgn = (Mesh*)Instance::getInstanceById(Scene::originTransformInstance);
 	if (!orgn) return;
 	if (!Instance::isInstanceOf(orgn->type, Instance::InstanceType_Mesh)) return;
@@ -932,7 +1007,7 @@ void EngineGUI::DrawGizmo() {
 	gizmoAnchor->position = si->getWorldPosition();
 
 	gizmoAnchor->scale = vec3(1.0f, 1.0f, 1.0f) * (si->getWorldPosition() - Scene::getCurrentCamera()->position).gmag() * 0.05f;
-	
+
 	if (gizmoLocalSpace) gizmoAnchor->rotation = si->getWorldRotationMatrix().toEuler();
 	else gizmoAnchor->rotation = vec3(0, 0, 0);
 
@@ -1095,7 +1170,7 @@ float EngineGUI::getMoveDistanceAlongAxis() {
 	vec3 mousePosition = cameraPosition + mouseRayDirection * t;
 
 	float axisDistance = (mousePosition - gizmoPosition).dot(axis);
-	
+
 	return axisDistance;
 }
 
@@ -1133,7 +1208,7 @@ void EngineGUI::updateGizmoObjectRotate() {
 
 	SpatialInstance* si = dynamic_cast<SpatialInstance*>(Instance::getInstanceById(selectedInstanceId));
 	if (!si) return;
-// Euler rotation is stored in radians (see DrawRotationFloat3)
+	// Euler rotation is stored in radians (see DrawRotationFloat3)
 	mat3 D = mat3::axisAngleToMat3(originalObjectAxis, delta);
 	mat3 newWorld = D * gizmoStartWorldRot;
 	mat3 newLocal = gizmoParentRotation.transposed() * newWorld;
@@ -1149,7 +1224,7 @@ void EngineGUI::updateGizmoObjectTranslate() {
 
 	vec4 worldAxis = si->getWorldTransform() * vec4(originalObjectAxis.X, originalObjectAxis.Y, originalObjectAxis.Z, 0.0f);
 	vec3 axis = vec3(worldAxis.X, worldAxis.Y, worldAxis.Z).smag(1.0f);
-	
+
 	float axisDistance = getMoveDistanceAlongAxis() - gizmoAxisOffset;
 
 	if (gizmoSnapPhysical > 0.0f) {
@@ -1259,9 +1334,9 @@ void EngineGUI::DrawScaleGizmo(Instance* s) {
 		GLubyte id = 0;
 		glReadPixels(glMouseX, glMouseY, 1, 1, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, &id);
 
-		if (id >= 11 && id <= 13)      { axisSelected = id - 10; gizmoScaleSign = 1; }
+		if (id >= 11 && id <= 13) { axisSelected = id - 10; gizmoScaleSign = 1; }
 		else if (id >= 21 && id <= 23) { axisSelected = id - 20; gizmoScaleSign = -1; }
-		else                           { axisSelected = 0; }
+		else { axisSelected = 0; }
 	}
 	isGizmoRender = true;
 	glStencilMask(0xFF);
@@ -1271,9 +1346,7 @@ void EngineGUI::DrawScaleGizmo(Instance* s) {
 
 bool EngineGUI::isEditorConsumeKeyInput(int key, int scancode, int action, int mods) {
 
-	printf("Key %d, scancode %d, action %d, mods %d\n", key, scancode, action, mods);
 	if (isGizmoRender && !isGizmoActive) {
-		printf("Gizmo is rendered and not active, checking for key input\n");
 		if (action == GLFW_PRESS) {
 			if (key == GLFW_KEY_1) {
 				gizmoType = GizmoType_Translate;

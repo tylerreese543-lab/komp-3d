@@ -93,6 +93,9 @@
     <ClInclude Include="SpatialInstance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TagContainer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="GameInstance.cpp">
@@ -195,6 +198,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="SpatialInstance.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TagContainer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
