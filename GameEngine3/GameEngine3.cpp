@@ -78,6 +78,11 @@ int main() {
 	GizmoMaterialZ->setShader(nullptr);
 	GizmoMaterialZ->diffuseColor = vec4(0, 0, 1, 0.5);
 	GizmoMaterialZ->isEditorIntrinsic = true;
+
+	Material* GizmoMaterialO = new Material();
+	GizmoMaterialO->setShader(nullptr);
+	GizmoMaterialO->diffuseColor = vec4(1, 1, 1, 0.5);
+	GizmoMaterialO->isEditorIntrinsic = true;
 	Geometry* cubeGeom = new Geometry();
 	cubeGeom->isEditorIntrinsic = true;
 	cubeGeom->name = "CubeGeom";
@@ -115,6 +120,31 @@ int main() {
 	gizmoMeshTZ->material = GizmoMaterialZ->getId();
 	gizmoMeshTZ->geometry = cubeGeom->getId();
 	Scene::translateInstance[eAxis_Z - 1] = gizmoMeshTZ->getId();
+
+	Mesh* gizmoMeshO = new Mesh();
+	gizmoMeshO->isEditorIntrinsic = true;
+	gizmoMeshO->name = "MeshTransformOrigin";
+	gizmoMeshO->setParent(positionGizmoMesh);
+	gizmoMeshO->position = vec3(0, 0, 0);
+	gizmoMeshO->scale = vec3(0.3, 0.3, 0.3);
+	gizmoMeshO->material = GizmoMaterialO->getId();
+	gizmoMeshO->geometry = cubeGeom->getId();
+	Scene::originTransformInstance = gizmoMeshO->getId();
+
+	Material* scaleMats[3] = { GizmoMaterialX, GizmoMaterialY, GizmoMaterialZ };
+	const char* axisNames[3] = { "X", "Y", "Z" };
+	for (int a = 0; a < 3; a++) {
+		for (int s = 0; s < 2; s++) {
+			Mesh* h = new Mesh();
+			h->isEditorIntrinsic = true;
+			h->scale = vec3(.5, .5, .5);
+			h->name = std::string("MeshScale") + (s ? "Neg" : "Pos") + axisNames[a];
+			h->setParent(positionGizmoMesh);
+			h->material = scaleMats[a]->getId();
+			h->geometry = cubeGeom->getId();
+			Scene::scaleInstance[a * 2 + s] = h->getId();
+		}
+	}
 
 #endif
 
@@ -391,7 +421,7 @@ int main() {
 
 		if (Scene::isStudio) {
 			EngineGUI::calculateMouseRayDirection();
-			EngineGUI::DrawTranslateGizmo();
+			EngineGUI::DrawGizmo();
 			EngineGUI::updateGizmoObject();
 		}
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

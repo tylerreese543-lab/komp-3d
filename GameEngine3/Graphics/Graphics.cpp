@@ -1,6 +1,7 @@
 #include "Graphics.h"
 #include "../EngineGUI.h"
 #include "../TextureResource.h"
+#include "../Scene.h"
 Graphics* Graphics::instance = nullptr;
 
 vec4 Graphics::backgroundColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -237,7 +238,12 @@ void KeyboardData::SetKeyCallback(int key, int scancode, int action, int mods) {
 
 		if (io.WantCaptureKeyboard) {
 			return;
+		}
+		if (Scene::isStudio) {
+			if (EngineGUI::isEditorConsumeKeyInput(key, scancode, action, mods)) {
+				return;
 			}
+		}
 			if (action == GLFW_PRESS) {
 				for (sol::protected_function& f : on_key_down.connections) {
 					f(key, scancode, mods);

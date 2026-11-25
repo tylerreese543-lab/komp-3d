@@ -9,6 +9,10 @@
 #include <PUGIXML/pugixml.hpp>
 class EngineGUI {
 	
+
+	static float& axisRef(vec3& v, int axis) {
+		return axis == eAxis_X ? v.X : (axis == eAxis_Y ? v.Y : v.Z);
+	}
 	static pugi::xml_document tooltipsXML;
 	static bool wasXMLSuccessful;
 	static const int EDITOR_ADD_INSTANCE[19];
@@ -27,6 +31,8 @@ class EngineGUI {
 	static char search[128];
 	static bool isModalAddInstanceOpen;
 
+
+	static float getDragDistanceAlongWorldAxis(vec3, vec3);
 	static int maxSamplesAudioPlayback;
 	static int currentSamplesAudioPlayback;
 	static const std::string placeholderNoInstance;
@@ -58,18 +64,45 @@ public:
 
 
 	static float gizmoSnapPhysical; //How much do we snap on translate/scaling
+	static float gizmoSnapOrientation; //How much do we snap on rotation
+
+
+	enum GizmoType {
+		GizmoType_Translate = 0,
+		GizmoType_Rotate,
+		GizmoType_Scale,
+		GizmoType_MAX
+	};
+
+	static const std::string gizmoTypeNames[GizmoType_MAX];
 	static int axisSelected;
 	static bool isGizmoActive;
+	static int gizmoType;
 	static vec3 mouseRayDirection;
 	static vec3 originalObjectTransform;
 	static vec3 originalObjectAxis;
 
+	static bool gizmoLocalSpace;      // true = rotate around the object's own axes
+	static mat3 gizmoParentRotation;  // P
+	static mat3 gizmoStartWorldRot;   // W0
 	static vec3 newTransform;
+	static vec3 gizmoStartScale;
+
+	static int gizmoScaleSign;
+	static vec3 gizmoFixedPoint;
+	static float gizmoStartSize;
+	static float gizmoStartGrab;
+
+	static float kScaleHalfExtent;
+	static float kMinScaleSize;
+	static void updateGizmoObjectScale();
 	static float gizmoAxisOffset;
+
+	static bool isGizmoRender; //Whether the gizmo is on the screen;
 	static void calculateMouseRayDirection();
 
-	static void DrawTranslateGizmo();
-
+	static void DrawGizmo();
+	static void DrawScaleGizmo(Instance* si);
 	static void selectInstance(Instance* inst);
 	static void updateSelectedInstanceHash();
 
@@ -80,5 +113,12 @@ public:
 	static void setAxisMovementMode(bool isMoving);
 
 	static float getMoveDistanceAlongAxis();
+	static float getRotateDistanceAlongAxis();
+
+	static void updateGizmoObjectRotate();
+	static void updateGizmoObjectTranslate();
+
 	static void updateGizmoObject();
+
+	static bool isEditorConsumeKeyInput(int key, int scancode, int action, int mods);
 };

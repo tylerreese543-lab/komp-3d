@@ -16,7 +16,10 @@
 int Scene::translateInstance[] = {
 	-1, -1, -1
 };
-
+int Scene::scaleInstance[] = {
+	-1, -1, -1, -1, -1, -1
+};
+int Scene::originTransformInstance = -1;
 int Scene::debugShader = -1;
 int Scene::coreShader = -1;
 #ifdef STUDIO_EDITOR

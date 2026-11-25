@@ -49,6 +49,21 @@ mat4 SpatialInstance::getWorldTransform() {
 	}
 }
 
+mat3 SpatialInstance::getWorldRotationMatrix() {
+	mat3 rotationMatrix = mat3::yxz(rotation.X, rotation.Y, rotation.Z);
+	if (parent == nullptr) {
+		return rotationMatrix;
+	}
+	else {
+		SpatialInstance* parentSpatial = getNextSpatialParent();
+		if (parentSpatial) {
+			return parentSpatial->getWorldRotationMatrix() * rotationMatrix;
+		}
+		else {
+			return rotationMatrix;
+		}
+	}
+}
 vec3 SpatialInstance::getWorldPosition() {
 	mat4 worldTransform = getWorldTransform();
 	return vec3(worldTransform.m[0][3], worldTransform.m[1][3], worldTransform.m[2][3]);

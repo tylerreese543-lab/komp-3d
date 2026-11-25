@@ -37,5 +37,7 @@ public:
 	virtual int saveInstanceToFile(FILE* file);
 	virtual int loadInstanceFromFile(void* data, int offset = 0);
 	virtual int getNumSaveBytes();
+
+	mat3 getWorldRotationMatrix();
 };
 

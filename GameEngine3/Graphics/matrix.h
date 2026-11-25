@@ -293,6 +293,40 @@ struct mat3 {
 		return &m[0][0];
 	};
 
+	vec3 toEuler() const {
+		vec3 e;
+		float sx = -m[1][2];
+		if (sx > 1.0f) sx = 1.0f;
+		if (sx < -1.0f) sx = -1.0f;
+		e.X = asinf(sx);
+		if (fabsf(sx) < 0.9999f) {
+			e.Y = atan2f(m[0][2], m[2][2]);
+			e.Z = atan2f(m[1][0], m[1][1]);
+		}
+		else { // gimbal lock: fold roll into yaw
+			e.Y = atan2f(-m[2][0], m[0][0]);
+			e.Z = 0.0f;
+		}
+		return e;
+	}
+
+
+	static mat3 axisAngleToMat3(const vec3& a, float ang) {
+		float c = cosf(ang), s = sinf(ang), t = 1.0f - c;
+		return mat3(
+			t * a.X * a.X + c,       t * a.X * a.Y - s * a.Z, t * a.X * a.Z + s * a.Y,
+			t * a.X * a.Y + s * a.Z, t * a.Y * a.Y + c,       t * a.Y * a.Z - s * a.X,
+			t * a.X * a.Z - s * a.Y, t * a.Y * a.Z + s * a.X, t * a.Z * a.Z + c
+		);
+	}
+
+	mat3 transposed() {
+		return mat3(
+			m[0][0], m[1][0], m[2][0],
+			m[0][1], m[1][1], m[2][1],
+			m[0][2], m[1][2], m[2][2]
+		);
+	}
 	static mat3 yxz(float x, float y, float z) {
 		return zrot(z) * xrot(x) * yrot(y);
 	}
@@ -313,7 +347,6 @@ struct mat3 {
 	}
 	inline vec3 operator* (const vec3& vec) const {
 		vec3 returnv3;
-		//std::cout << "Multiplying vec3 by mat3\n";
 		returnv3.X = vec.X * m[0][0] + vec.Y * m[0][1] + vec.Z * m[0][2];
 		returnv3.Y = vec.X * m[1][0] + vec.Y * m[1][1] + vec.Z * m[1][2];
 		returnv3.Z = vec.X * m[2][0] + vec.Y * m[2][1] + vec.Z * m[2][2];

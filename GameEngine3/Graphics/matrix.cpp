@@ -150,10 +150,10 @@ mat4 mat4::zrot(float rad) {
 	);
 };
 mat4 mat4::yxz(float rad_x, float rad_y, float rad_z) {
-	return  yrot(rad_y) * xrot(rad_x) * zrot(rad_z);
+	return  zrot(rad_z) * xrot(rad_x) * yrot(rad_y);
 }
 mat4 mat4::zxy(float rad_x, float rad_y, float rad_z) {
-	return  zrot(rad_z) * xrot(rad_x) * yrot(rad_y);
+	return  yrot(rad_y) * xrot(rad_x) * zrot(rad_z);
 }
 mat4 mat4::transform(vec3 trans, vec3 scale, vec3 rot) {
 	mat4 translate(

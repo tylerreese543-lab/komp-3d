@@ -12,6 +12,8 @@ class Scene : public Instance
 public:
 
 	static int translateInstance[3];
+	static int scaleInstance[6];
+	static int originTransformInstance;
 	static int debugShader;
 	static int coreShader;
 	static const bool isStudio;

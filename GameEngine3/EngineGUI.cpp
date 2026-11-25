@@ -12,6 +12,20 @@ int EngineGUI::axisSelected = -1;
 int EngineGUI::selectedInstanceId = -1;
 std::string EngineGUI::selectedInstanceHash = "";
 
+float EngineGUI::kScaleHalfExtent = 1.0f;
+float EngineGUI::kMinScaleSize = 0.01f;
+
+int EngineGUI::gizmoScaleSign = 1;
+float EngineGUI::gizmoStartSize = 1;
+float EngineGUI::gizmoStartGrab = 0;
+vec3 EngineGUI::gizmoFixedPoint = vec3(0, 0, 0);
+
+const std::string EngineGUI::gizmoTypeNames[] = {
+	"Translate",
+	"Rotate",
+	"Scale"
+};
+
 
 int EngineGUI::eyeDropperId = -1;
 int EngineGUI::eyeDropperSpecificType = -1;
@@ -29,9 +43,18 @@ vec3 EngineGUI::originalObjectAxis;
 vec3 EngineGUI::newTransform;
 float EngineGUI::gizmoAxisOffset;
 float EngineGUI::gizmoSnapPhysical = 1;
+float EngineGUI::gizmoSnapOrientation = 45;
 pugi::xml_document EngineGUI::tooltipsXML;
 bool EngineGUI::wasXMLSuccessful = false;
 bool EngineGUI::isGizmoActive = false;
+bool EngineGUI::gizmoLocalSpace = false;      // true = rotate around the object's own axes
+mat3 EngineGUI::gizmoParentRotation;  // P
+mat3 EngineGUI::gizmoStartWorldRot;   // W0
+
+bool EngineGUI::isGizmoRender = false;
+int EngineGUI::gizmoType = EngineGUI::GizmoType_Translate;
+
+vec3 EngineGUI::gizmoStartScale;
 const int EngineGUI::EDITOR_ADD_INSTANCE[] = {
 	Instance::InstanceType_Camera,
 	Instance::InstanceType_Mesh,
@@ -376,6 +399,26 @@ void EngineGUI::DrawInspectorPanel(Instance* inst) {
 				gizmoSnapPhysical = 0.0f;
 			}
 		}
+		if (ImGui::InputFloat("Rotate Snap", (float*)&gizmoSnapOrientation)) {
+			if (gizmoSnapOrientation < 0.0f) {
+				gizmoSnapOrientation = 0.0f;
+			}
+		}
+
+		
+		if (newInstanceSelected) {
+			if (gizmoType == GizmoType_Translate) {
+				currentSelectionDropdown = 0;
+			}
+			else if (gizmoType == GizmoType_Rotate) {
+				currentSelectionDropdown = 1;
+			}
+		}
+		if (DrawDropdown("Gizmo Type", (std::string*)gizmoTypeNames, 3) != -1) {
+			gizmoType = currentSelectionDropdown;
+		}
+
+		ImGui::Checkbox("Rotate In Local Space", &gizmoLocalSpace);
 	}
 	if (inst->type == Instance::InstanceType_Collision3D) {
 		Collision3D* m = (Collision3D*)inst;
@@ -853,9 +896,9 @@ mouseRayDirection = vec3(worldDirVec4.X, worldDirVec4.Y, worldDirVec4.Z).smag(1.
 
 }
 
-void EngineGUI::DrawTranslateGizmo() {
+void EngineGUI::DrawGizmo() {
 
-
+	isGizmoRender = false;
 	if (!Scene::isStudio) return;
 	//many many many sanity checks
 	if (selectedInstanceId == -1) return;
@@ -863,6 +906,10 @@ void EngineGUI::DrawTranslateGizmo() {
 	if (!si) return;
 	if (!Instance::isInstanceOf(si->type, Instance::InstanceType_Spatial)) return;
 
+	if (gizmoType == GizmoType_Scale) {
+		DrawScaleGizmo(si);
+		return;
+	}
 	Mesh* tx = (Mesh*)Instance::getInstanceById(Scene::translateInstance[eAxis_X - 1]);
 	if (!tx) return;
 	if (!Instance::isInstanceOf(tx->type, Instance::InstanceType_Mesh)) return;
@@ -875,6 +922,10 @@ void EngineGUI::DrawTranslateGizmo() {
 	if (!tz) return;
 	if (!Instance::isInstanceOf(tz->type, Instance::InstanceType_Mesh)) return;
 	
+	Mesh* orgn = (Mesh*)Instance::getInstanceById(Scene::originTransformInstance);
+	if (!orgn) return;
+	if (!Instance::isInstanceOf(orgn->type, Instance::InstanceType_Mesh)) return;
+
 	Mesh* gizmoAnchor = (Mesh*)tz->parent;
 	if (!gizmoAnchor) return;
 
@@ -882,24 +933,31 @@ void EngineGUI::DrawTranslateGizmo() {
 
 	gizmoAnchor->scale = vec3(1.0f, 1.0f, 1.0f) * (si->getWorldPosition() - Scene::getCurrentCamera()->position).gmag() * 0.05f;
 	
-	gizmoAnchor->rotation = si->getWorldRotation();
-	glEnable(GL_STENCIL_TEST);
+	if (gizmoLocalSpace) gizmoAnchor->rotation = si->getWorldRotationMatrix().toEuler();
+	else gizmoAnchor->rotation = vec3(0, 0, 0);
+
 	glClearStencil(100);
 	glStencilMask(0xFF);
 	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
+	glDisable(GL_STENCIL_TEST);
+
+	orgn->render(Scene::getCurrentCamera(), true);
+	glEnable(GL_STENCIL_TEST);
 
 	if (!isGizmoActive || axisSelected == eAxis_X) {
 		glStencilFunc(GL_ALWAYS, eAxis_X + 10, 0xFF);
 		tx->render(Scene::getCurrentCamera(), true);
 	}
-	if (!isGizmoActive || axisSelected == 2) {
+	if (!isGizmoActive || axisSelected == eAxis_Y) {
 		glStencilFunc(GL_ALWAYS, eAxis_Y + 10, 0xFF);
 		ty->render(Scene::getCurrentCamera(), true);
 	}
-	if (!isGizmoActive || axisSelected == 3) {
+	if (!isGizmoActive || axisSelected == eAxis_Z) {
 		glStencilFunc(GL_ALWAYS, eAxis_Z + 10, 0xFF);
 		tz->render(Scene::getCurrentCamera(), true);
 	}
+	isGizmoRender = true;
 	MouseData md = Graphics::getInstance()->mouse_data;
 
 	//Coordinates should be from 0 - windowWidth and 0 - windowHeight, with (0,0) being the bottom left corner of the window
@@ -928,21 +986,75 @@ void EngineGUI::setAxisMovementMode(bool isMoving) {
 		if (!Instance::isInstanceOf(si->type, Instance::InstanceType_Spatial)) return;
 
 		isGizmoActive = true;
-		originalObjectTransform = si->getWorldPosition();
 
 		if (axisSelected != eAxis_X && axisSelected != eAxis_Y && axisSelected != eAxis_Z) {
 			isGizmoActive = false;
 			return;
 		}
-		originalObjectAxis = vec3::axis(axisSelected);
+
+		if (gizmoType == GizmoType_Translate) {
+			originalObjectTransform = si->getWorldPosition();
+			originalObjectAxis = vec3::axis(axisSelected);
+			gizmoAxisOffset = getMoveDistanceAlongAxis();
+		}
+		else if (gizmoType == GizmoType_Rotate) {
 
 
-		gizmoAxisOffset = getMoveDistanceAlongAxis();
-		printf("AxisAAA: %f\n", gizmoAxisOffset);
+			SpatialInstance* parentSpatial = si->getNextSpatialParent();
+			gizmoParentRotation = parentSpatial ? parentSpatial->getWorldRotationMatrix() : mat3();
+			gizmoStartWorldRot = si->getWorldRotationMatrix();
+			originalObjectTransform = si->rotation;
+
+			vec3 localAxis = vec3::axis(axisSelected);
+			originalObjectAxis = gizmoLocalSpace ? gizmoStartWorldRot * localAxis : localAxis; // world-space axis
+			gizmoAxisOffset = getRotateDistanceAlongAxis();
+		}
+		else if (gizmoType == GizmoType_Scale) {
+			gizmoStartScale = si->scale;
+
+			vec3 center = si->getWorldPosition();
+			vec3 worldAxis = (si->getWorldRotationMatrix() * vec3::axis(axisSelected)).smag(1.0f);
+			vec3 worldScale = si->getWorldScale();
+
+			gizmoStartSize = fmaxf(axisRef(worldScale, axisSelected) * kScaleHalfExtent * 2.0f, kMinScaleSize);
+			originalObjectAxis = worldAxis * (float)gizmoScaleSign;       // points from fixed face toward grabbed face
+			gizmoFixedPoint = center - originalObjectAxis * (gizmoStartSize * 0.5f);
+			gizmoStartGrab = getDragDistanceAlongWorldAxis(gizmoFixedPoint, originalObjectAxis);
+		}
 	}
 	else {
 		axisSelected = 0;
 		isGizmoActive = false;
+	}
+}
+void EngineGUI::updateGizmoObjectScale() {
+	if (!isGizmoActive) return;
+	SpatialInstance* si = dynamic_cast<SpatialInstance*>(Instance::getInstanceById(selectedInstanceId));
+	if (!si) return;
+
+	// New world size of the box along the axis: original size + how far the mouse has moved.
+	float newSize = gizmoStartSize + (getDragDistanceAlongWorldAxis(gizmoFixedPoint, originalObjectAxis) - gizmoStartGrab);
+
+	if (gizmoSnapPhysical > 0.0f) {
+		newSize = roundf(newSize / gizmoSnapPhysical) * gizmoSnapPhysical;
+	}
+	newSize = fmaxf(newSize, kMinScaleSize);
+
+	// Scale: local scale is proportional to world size
+	vec3 newScale = gizmoStartScale;
+	axisRef(newScale, axisSelected) *= newSize / gizmoStartSize;
+	si->scale = newScale;
+
+	// Position: the box center sits halfway between the fixed face and the dragged face
+	vec3 newCenter = gizmoFixedPoint + originalObjectAxis * (newSize * 0.5f);
+
+	SpatialInstance* parentSpatial = si->getNextSpatialParent();
+	if (parentSpatial) {
+		vec4 local = parentSpatial->getWorldTransform().inverse() * vec4(newCenter.X, newCenter.Y, newCenter.Z, 1.0f);
+		si->position = vec3(local.X, local.Y, local.Z);
+	}
+	else {
+		si->position = newCenter;
 	}
 }
 
@@ -987,7 +1099,47 @@ float EngineGUI::getMoveDistanceAlongAxis() {
 	return axisDistance;
 }
 
-void EngineGUI::updateGizmoObject() {
+float EngineGUI::getRotateDistanceAlongAxis() {
+	if (!isGizmoActive) return 0;
+	Camera* cam = Scene::getCurrentCamera();
+	SpatialInstance* si = dynamic_cast<SpatialInstance*>(Instance::getInstanceById(selectedInstanceId));
+	if (!cam || !si) return 0;
+
+	vec3 origin = si->getWorldPosition();
+	vec3 n = originalObjectAxis;
+	vec3 camPos = cam->getWorldPosition();
+
+	float denom = n.dot(mouseRayDirection);
+	if (fabsf(denom) < 1e-5f) return 0; // ray parallel to the plane
+	float t = n.dot(origin - camPos) / denom;
+	vec3 hit = camPos + mouseRayDirection * t - origin;
+
+	// Build a basis in the plane
+	vec3 ref = fabsf(n.Y) < 0.99f ? vec3(0, 1, 0) : vec3(1, 0, 0);
+	vec3 u = n.cross(ref).smag(1.0f);
+	vec3 v = n.cross(u);
+	return atan2f(hit.dot(v), hit.dot(u));
+}
+
+void EngineGUI::updateGizmoObjectRotate() {
+
+
+	if (!isGizmoActive) return;
+	float delta = getRotateDistanceAlongAxis() - gizmoAxisOffset;
+
+	if (gizmoSnapOrientation > 0.0f) {
+		delta = roundf(delta / (gizmoSnapOrientation * (PI / 180.0f))) * (gizmoSnapOrientation * (PI / 180.0f));
+	}
+
+	SpatialInstance* si = dynamic_cast<SpatialInstance*>(Instance::getInstanceById(selectedInstanceId));
+	if (!si) return;
+// Euler rotation is stored in radians (see DrawRotationFloat3)
+	mat3 D = mat3::axisAngleToMat3(originalObjectAxis, delta);
+	mat3 newWorld = D * gizmoStartWorldRot;
+	mat3 newLocal = gizmoParentRotation.transposed() * newWorld;
+	si->rotation = newLocal.toEuler();
+}
+void EngineGUI::updateGizmoObjectTranslate() {
 
 
 	if (!isGizmoActive) return;
@@ -1026,4 +1178,117 @@ void EngineGUI::updateGizmoObject() {
 		si->position = newWorldPosition;
 
 	}
+}
+
+void EngineGUI::updateGizmoObject() {
+	if (gizmoType == GizmoType_Translate) {
+		updateGizmoObjectTranslate();
+	}
+	else if (gizmoType == GizmoType_Rotate) {
+		updateGizmoObjectRotate();
+	}
+	else if (gizmoType == GizmoType_Scale) {
+		updateGizmoObjectScale();
+	}
+}
+
+float EngineGUI::getDragDistanceAlongWorldAxis(vec3 origin, vec3 worldAxis) {
+	Camera* cam = Scene::getCurrentCamera();
+	if (!cam) return 0;
+
+	vec3 camPos = cam->getWorldPosition();
+	vec3 axis = worldAxis.smag(1.0f);
+	vec3 camToOrigin = (origin - camPos).smag(1.0f);
+	vec3 planeNormal = axis.cross(camToOrigin.cross(axis)).smag(1.0f);
+
+	float denom = mouseRayDirection.dot(planeNormal);
+	if (fabsf(denom) < 0.0001f) return 0;
+
+	float t = (origin - camPos).dot(planeNormal) / denom;
+	vec3 hit = camPos + mouseRayDirection * t;
+	return (hit - origin).dot(axis);
+}
+
+void EngineGUI::DrawScaleGizmo(Instance* s) {
+
+	SpatialInstance* si = dynamic_cast<SpatialInstance*>(s);
+	Mesh* handles[6];
+	for (int i = 0; i < 6; i++) {
+		handles[i] = (Mesh*)Instance::getInstanceById(Scene::scaleInstance[i]);
+		if (!handles[i] || !Instance::isInstanceOf(handles[i]->type, Instance::InstanceType_Mesh)) return;
+	}
+	Mesh* anchor = (Mesh*)handles[0]->parent;
+	if (!anchor) return;
+
+	Camera* cam = Scene::getCurrentCamera();
+	anchor->position = si->getWorldPosition();
+	anchor->rotation = si->getWorldRotationMatrix().toEuler(); // scaling always follows the object's own axes
+	anchor->scale = vec3(1.0f, 1.0f, 1.0f);
+
+	vec3 half = si->getWorldScale() * kScaleHalfExtent;
+	float handleSize = (si->getWorldPosition() - cam->position).gmag() * 0.03f;
+
+	for (int a = eAxis_X; a <= eAxis_Z; a++) {
+		for (int s = 0; s < 2; s++) {
+			Mesh* h = handles[(a - 1) * 2 + s];
+			vec3 p(0, 0, 0);
+			axisRef(p, a) = (s ? -1.0f : 1.0f) * axisRef(half, a);
+			h->position = p;
+			h->scale = vec3(handleSize, handleSize, handleSize);
+		}
+	}
+
+	glClearStencil(100);
+	glStencilMask(0xFF);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+	glEnable(GL_STENCIL_TEST);
+
+	// Stencil IDs: 11-13 = +X/+Y/+Z, 21-23 = -X/-Y/-Z
+	for (int a = eAxis_X; a <= eAxis_Z; a++) {
+		for (int s = 0; s < 2; s++) {
+			if (isGizmoActive && !(axisSelected == a && (s ? -1 : 1) == gizmoScaleSign)) continue;
+			glStencilFunc(GL_ALWAYS, 10 + a + (s ? 10 : 0), 0xFF);
+			handles[(a - 1) * 2 + s]->render(cam, true);
+		}
+	}
+
+	if (!isGizmoActive) {
+		MouseData md = Graphics::getInstance()->mouse_data;
+		int glMouseX = (int)((md.screenNormalized.X + 1) * 0.5 * Graphics::getInstance()->windowWidth);
+		int glMouseY = (int)((1 - ((md.screenNormalized.Y + 1) * 0.5)) * Graphics::getInstance()->windowHeight);
+		GLubyte id = 0;
+		glReadPixels(glMouseX, glMouseY, 1, 1, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, &id);
+
+		if (id >= 11 && id <= 13)      { axisSelected = id - 10; gizmoScaleSign = 1; }
+		else if (id >= 21 && id <= 23) { axisSelected = id - 20; gizmoScaleSign = -1; }
+		else                           { axisSelected = 0; }
+	}
+	isGizmoRender = true;
+	glStencilMask(0xFF);
+	glDisable(GL_STENCIL_TEST);
+}
+
+
+bool EngineGUI::isEditorConsumeKeyInput(int key, int scancode, int action, int mods) {
+
+	printf("Key %d, scancode %d, action %d, mods %d\n", key, scancode, action, mods);
+	if (isGizmoRender && !isGizmoActive) {
+		printf("Gizmo is rendered and not active, checking for key input\n");
+		if (action == GLFW_PRESS) {
+			if (key == GLFW_KEY_1) {
+				gizmoType = GizmoType_Translate;
+				return true;
+			}
+			else if (key == GLFW_KEY_2) {
+				gizmoType = GizmoType_Rotate;
+				return true;
+			}
+			else if (key == GLFW_KEY_3) {
+				gizmoType = GizmoType_Scale;
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
